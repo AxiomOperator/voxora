@@ -1,11 +1,12 @@
 "use client";
 
-import { Card, SimpleGrid, Skeleton, Text } from "@mantine/core";
+import { Badge, Card, Group, SimpleGrid, Skeleton, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { getJobs, getMedia, getTranscripts } from "@/lib/api";
+import { getJobs, getMedia, getRuntimeInfo, getTranscripts } from "@/lib/api";
 
 export default function StatsPanel() {
   const [stats, setStats] = useState(null);
+  const [runtime, setRuntime] = useState(null);
 
   useEffect(() => {
     Promise.all([getMedia(), getJobs(), getTranscripts()])
@@ -18,6 +19,11 @@ export default function StatsPanel() {
           totalTranscripts: transcripts.length,
         });
       })
+      .catch(() => {
+        /* silently fail */
+      });
+    getRuntimeInfo()
+      .then(setRuntime)
       .catch(() => {
         /* silently fail */
       });
@@ -53,6 +59,27 @@ export default function StatsPanel() {
               </Text>}
         </Card>
       ))}
+      {runtime && (
+        <Card withBorder radius="md" p="md">
+          <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="xs">
+            Engine
+          </Text>
+          <Group gap="xs">
+            <Badge
+              color={runtime.device === "cuda" ? "green" : "gray"}
+              variant="light"
+              size="sm"
+            >
+              {runtime.device ?? "—"}
+            </Badge>
+            {runtime.model_size && (
+              <Badge variant="outline" size="sm">
+                {runtime.model_size}
+              </Badge>
+            )}
+          </Group>
+        </Card>
+      )}
     </SimpleGrid>
   );
 }

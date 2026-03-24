@@ -33,8 +33,20 @@ async def upload_media(
     session: SessionDep,
     files: List[UploadFile] = File(...),
 ):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+
     results = []
     for file in files:
+        # Validate the file has content
+        first_byte = await file.read(1)
+        await file.seek(0)
+        if len(first_byte) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File '{file.filename or 'upload'}' is empty",
+            )
+
         saved = await file_service.save_upload(file)
         media = MediaFile(
             original_name=file.filename or "upload",

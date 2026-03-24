@@ -209,3 +209,13 @@ export function deleteHighlight(transcriptId, highlightId) {
     { method: "DELETE" },
   );
 }
+
+// ── Settings ───────────────────────────────────────────────────────────────
+
+export function getSettings() {
+  return apiFetch("/api/v1/settings");
+}
+
+export function getRuntimeInfo() {
+  return apiFetch("/api/v1/settings/runtime");
+}

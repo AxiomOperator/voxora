@@ -129,22 +129,23 @@ function JobStatusCard({ job }) {
           <Badge color={jobStatusColor(job.status)} variant="light" size="sm">
             {job.status}
           </Badge>
-          {job.status === "done" && (
+          {job.status === "completed" && job.transcript_id && (
             <Button
               component={Link}
-              href={`/transcripts`}
+              href={`/transcripts/${job.transcript_id}`}
               size="xs"
-              variant="light"
+              variant="filled"
+              color="green"
             >
               View Transcript
             </Button>
           )}
         </Group>
       </Group>
-      {job.error_message && (
-        <Text size="xs" c="red" mt="xs">
+      {job.status === "failed" && job.error_message && (
+        <Alert color="red" mt="xs" py="xs" px="sm">
           {job.error_message}
-        </Text>
+        </Alert>
       )}
     </Card>
   );
@@ -152,11 +153,11 @@ function JobStatusCard({ job }) {
 
 function jobStatusColor(status) {
   switch (status) {
-    case "done":
+    case "completed":
       return "green";
     case "processing":
       return "yellow";
-    case "error":
+    case "failed":
       return "red";
     default:
       return "gray";

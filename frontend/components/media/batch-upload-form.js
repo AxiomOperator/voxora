@@ -128,6 +128,26 @@ export default function BatchUploadForm({ onUploaded }) {
 
       {files.length > 0 && (
         <Stack gap="xs">
+          <Group justify="space-between">
+            <Text size="sm" c="dimmed">
+              {
+                files.filter(
+                  (f) => f.status === "done" || f.status === "transcribing",
+                ).length
+              }
+              /{files.length} uploaded
+              {files.filter((f) => f.status === "error").length > 0 &&
+                ` · ${files.filter((f) => f.status === "error").length} failed`}
+            </Text>
+            <Button
+              size="xs"
+              variant="subtle"
+              color="gray"
+              onClick={() => setFiles([])}
+            >
+              Clear list
+            </Button>
+          </Group>
           {files.map((entry) => (
             <Group key={entry.id} justify="space-between" wrap="nowrap">
               <Text size="sm" truncate style={{ flex: 1 }}>

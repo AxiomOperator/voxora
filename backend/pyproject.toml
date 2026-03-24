@@ -13,6 +13,7 @@ dependencies = [
     "pytest",
     "pytest-anyio",
     "aiofiles>=25.1.0",
+    "faster-whisper>=1.0.0",
 ]
 
 [build-system]

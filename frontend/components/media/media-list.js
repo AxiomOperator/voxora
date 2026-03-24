@@ -2,6 +2,7 @@
 
 import {
   ActionIcon,
+  Alert,
   Anchor,
   Badge,
   Skeleton,
@@ -49,9 +50,9 @@ export default function MediaList({ refreshTrigger, query }) {
 
   if (error) {
     return (
-      <Text size="sm" c="red">
-        Failed to load media: {error}
-      </Text>
+      <Alert color="red" title="Failed to load media">
+        {error}
+      </Alert>
     );
   }
 
@@ -63,11 +64,17 @@ export default function MediaList({ refreshTrigger, query }) {
 
   if (displayed.length === 0) {
     return (
-      <Text size="sm" c="dimmed">
-        {query
-          ? "No media files match your search."
-          : "No media files yet. Upload one above."}
-      </Text>
+      <Stack align="center" py="xl" gap="xs">
+        <Text size="lg">🎵</Text>
+        <Text fw={500}>
+          {query ? "No media files match your search." : "No media files yet."}
+        </Text>
+        {!query && (
+          <Text size="sm" c="dimmed">
+            Upload an audio or video file above to get started.
+          </Text>
+        )}
+      </Stack>
     );
   }
 

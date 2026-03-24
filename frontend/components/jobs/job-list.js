@@ -1,6 +1,14 @@
 "use client";
 
-import { Anchor, Badge, Skeleton, Stack, Table, Text } from "@mantine/core";
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Skeleton,
+  Stack,
+  Table,
+  Text,
+} from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJobs } from "@/lib/api";
@@ -31,17 +39,22 @@ export default function JobList({ status }) {
 
   if (error) {
     return (
-      <Text size="sm" c="red">
-        Failed to load jobs: {error}
-      </Text>
+      <Alert color="red" title="Failed to load jobs">
+        {error}
+      </Alert>
     );
   }
 
   if (jobs.length === 0) {
     return (
-      <Text size="sm" c="dimmed">
-        No transcription jobs yet.
-      </Text>
+      <Stack align="center" py="xl" gap="xs">
+        <Text size="lg">📋</Text>
+        <Text fw={500}>No transcription jobs yet.</Text>
+        <Text size="sm" c="dimmed">
+          Open a media file and click &ldquo;Start Transcription&rdquo; to
+          create one.
+        </Text>
+      </Stack>
     );
   }
 
@@ -53,6 +66,7 @@ export default function JobList({ status }) {
           <Table.Th>Media</Table.Th>
           <Table.Th>Language</Table.Th>
           <Table.Th>Status</Table.Th>
+          <Table.Th>Duration</Table.Th>
           <Table.Th>Created</Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -86,11 +100,34 @@ export default function JobList({ status }) {
               >
                 {job.status}
               </Badge>
+              {job.status === "failed" && job.error_message && (
+                <Text size="xs" c="red" mt={2} lineClamp={1}>
+                  {job.error_message}
+                </Text>
+              )}
             </Table.Td>
             <Table.Td>
               <Text size="sm" c="dimmed">
-                {new Date(job.created_at).toLocaleDateString()}
+                {job.duration_seconds != null
+                  ? formatDuration(job.duration_seconds)
+                  : "—"}
               </Text>
+            </Table.Td>
+            <Table.Td>
+              <Stack gap={2}>
+                <Text size="sm" c="dimmed">
+                  {new Date(job.created_at).toLocaleDateString()}
+                </Text>
+                {job.status === "completed" && job.transcript_id && (
+                  <Anchor
+                    component={Link}
+                    href={`/transcripts/${job.transcript_id}`}
+                    size="xs"
+                  >
+                    View Transcript
+                  </Anchor>
+                )}
+              </Stack>
             </Table.Td>
           </Table.Tr>
         ))}
@@ -110,4 +147,11 @@ function jobStatusColor(status) {
     default:
       return "gray";
   }
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m ${s}s`;
 }

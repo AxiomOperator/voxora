@@ -33,9 +33,15 @@ export default function JobDetailPage({ params }) {
   }
 
   if (error) {
+    const isNotFound = error.includes("404");
     return (
-      <Alert color="red" title="Error">
-        {error}
+      <Alert
+        color={isNotFound ? "gray" : "red"}
+        title={isNotFound ? "Job not found" : "Error"}
+      >
+        {isNotFound
+          ? `Job #${jobId} does not exist or has been removed.`
+          : error}
       </Alert>
     );
   }

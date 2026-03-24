@@ -1,37 +1,22 @@
 """
-TranscriptionService — Phase 3.
+TranscriptionService — Phase 6.
 
 Architecture
 ------------
-The service is split into two layers:
+Two layers:
 
-1. _run_engine(file_path, language) → raw dict
-   ┌─────────────────────────────────────────────────────────────┐
-   │  This is the ONLY place that touches the ASR model.         │
-   │  To enable real transcription, replace the body of this     │
-   │  function with a Whisper call:                              │
-   │                                                             │
-   │      import whisper                                         │
-   │      model = whisper.load_model("base", device="cuda")      │
-   │      return model.transcribe(file_path, language=language)  │
-   │                                                             │
-   │  The rest of the service — job lifecycle, segment           │
-   │  persistence, error handling — stays unchanged.             │
-   └─────────────────────────────────────────────────────────────┘
+1. TranscriptionService._run_engine(file_path, language) → raw dict
+   Uses faster-whisper (WhisperModel) with lazy loading and GPU/CPU fallback.
 
 2. TranscriptionService.process_job(job, session)
-   Manages the full lifecycle:
+   Manages the full job lifecycle:
      pending → processing → completed / failed
    Persists Transcript + TranscriptSegment rows.
-   Creates Speaker rows from distinct segment labels (Phase 3+).
-
-GPU detection
--------------
-_gpu_available() checks for a CUDA-capable device at import time
-so the service can log a meaningful message at startup.
+   Creates Speaker rows from distinct segment labels.
 """
 
 import logging
+import concurrent.futures
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -43,84 +28,65 @@ from app.models.transcript_segment import TranscriptSegment
 
 logger = logging.getLogger(__name__)
 
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
-# ---------------------------------------------------------------------------
-# GPU detection (informational — does not gate the stub engine)
-# ---------------------------------------------------------------------------
-
-def _gpu_available() -> bool:
-    try:
-        import torch  # type: ignore
-        return torch.cuda.is_available()
-    except ImportError:
-        return False
-
-
-_HAS_GPU = _gpu_available()
-if _HAS_GPU:
-    logger.info("CUDA device detected — real ASR engine can be enabled in _run_engine()")
-else:
-    logger.info("No CUDA device detected — using stub transcription engine")
-
-
-# ---------------------------------------------------------------------------
-# Engine — replace this function body to enable real transcription
-# ---------------------------------------------------------------------------
-
-def _run_engine(file_path: str, language: Optional[str]) -> dict:
-    """
-    Transcription engine boundary.
-
-    Current implementation: deterministic stub.
-
-    To enable real GPU-backed transcription, replace this function body:
-
-        import whisper
-        device = "cuda" if _HAS_GPU else "cpu"
-        model = whisper.load_model("base", device=device)
-        return model.transcribe(file_path, language=language, word_timestamps=True)
-
-    Expected return shape (Whisper-compatible):
-        {
-            "text": str,
-            "language": str,
-            "segments": [
-                {
-                    "id": int,
-                    "start": float,
-                    "end": float,
-                    "text": str,
-                    "speaker_label": str | None   # populated by diarization
-                },
-                ...
-            ]
-        }
-    """
-    return {
-        "text": (
-            "[Stub] Transcription will appear here once the ASR engine is wired in. "
-            "See _run_engine() in app/services/transcription_service.py."
-        ),
-        "language": language or "en",
-        "segments": [
-            {
-                "id": 0,
-                "start": 0.0,
-                "end": 5.0,
-                "text": (
-                    "[Stub] Transcription will appear here once the ASR engine is wired in."
-                ),
-                "speaker_label": None,
-            }
-        ],
-    }
-
-
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
 
 class TranscriptionService:
+    def __init__(self, model_size: str = "base"):
+        self.model_size = model_size
+        self._model = None  # lazy load
+        try:
+            import torch  # type: ignore
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            self.device = "cpu"
+        self.compute_type = "float16" if self.device == "cuda" else "int8"
+
+    def _get_model(self):
+        if self._model is None:
+            from faster_whisper import WhisperModel  # type: ignore
+            self._model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
+        return self._model
+
+    def _run_engine(self, file_path: str, language: Optional[str] = None) -> dict:
+        model = self._get_model()
+        segments_gen, info = model.transcribe(
+            file_path,
+            language=language,
+            beam_size=5,
+        )
+        segments = []
+        full_text_parts = []
+        for idx, seg in enumerate(segments_gen):
+            segments.append({
+                "id": idx,
+                "start": seg.start,
+                "end": seg.end,
+                "text": seg.text.strip(),
+                "speaker_label": "Speaker 1",
+            })
+            full_text_parts.append(seg.text.strip())
+
+        if not full_text_parts:
+            raise RuntimeError(f"Transcription of '{file_path}' produced no output.")
+
+        return {
+            "text": " ".join(full_text_parts),
+            "language": info.language,
+            "segments": segments,
+        }
+
+    def get_model_info(self) -> dict:
+        return {
+            "model_size": self.model_size,
+            "device": self.device,
+            "compute_type": self.compute_type,
+        }
+
     def process_job(self, job: TranscriptionJob, session: Session) -> Transcript:
         """
         Full transcription lifecycle:
@@ -135,7 +101,7 @@ class TranscriptionService:
 
         try:
             file_path = self._resolve_file_path(job, session)
-            result = _run_engine(file_path, job.language)
+            result = self._run_engine(file_path, job.language)
 
             transcript = self._persist_transcript(job, result, session)
             self._persist_segments(transcript, result.get("segments", []), session)
@@ -202,10 +168,10 @@ class TranscriptionService:
     def _persist_segments(
         self, transcript: Transcript, raw_segments: list, session: Session
     ) -> None:
-        for seg in raw_segments:
+        for idx, seg in enumerate(raw_segments):
             segment = TranscriptSegment(
                 transcript_id=transcript.id,
-                segment_index=seg["id"],
+                segment_index=seg.get("id", idx),
                 start_seconds=seg["start"],
                 end_seconds=seg["end"],
                 text=seg["text"],

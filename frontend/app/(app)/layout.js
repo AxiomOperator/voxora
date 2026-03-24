@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import Link from "next/link";
+import Breadcrumbs from "@/components/breadcrumbs";
 
 function ColorSchemeToggle() {
   const { setColorScheme } = useMantineColorScheme();
@@ -70,10 +71,14 @@ export default function AppLayout({ children }) {
           <NavLink component={Link} href="/transcripts" label="Transcripts" />
           <NavLink component={Link} href="/jobs" label="Jobs" />
           <NavLink component={Link} href="/dashboard" label="Dashboard" />
+          <NavLink component={Link} href="/settings" label="Settings" />
         </Stack>
       </AppShell.Navbar>
 
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main>
+        <Breadcrumbs />
+        {children}
+      </AppShell.Main>
     </AppShell>
   );
 }

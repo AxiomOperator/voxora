@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./voxora.db"
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     STORAGE_DIR: str = "storage/uploads"
+    TRANSCRIPTION_MODEL: str = "base"
+    TRANSCRIPTION_LANGUAGE: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

@@ -5,7 +5,28 @@ from sqlmodel import SQLModel, create_engine, Session
 
 from app.main import app
 from app.db.database import get_session
+from app.services.transcription_service import TranscriptionService
 import app.models as _models  # noqa: F401 — registers all tables
+
+
+# ---------------------------------------------------------------------------
+# Stub engine for tests — avoids loading actual Whisper model
+# ---------------------------------------------------------------------------
+
+def _stub_engine(self, file_path: str, language=None) -> dict:
+    return {
+        "text": "[Stub] Transcription will appear here once the ASR engine is wired in.",
+        "language": language or "en",
+        "segments": [
+            {
+                "id": 0,
+                "start": 0.0,
+                "end": 5.0,
+                "text": "[Stub] Transcription will appear here once the ASR engine is wired in.",
+                "speaker_label": "Speaker 1",
+            }
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -13,7 +34,7 @@ import app.models as _models  # noqa: F401 — registers all tables
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(name="client")
-def client_fixture(tmp_path):
+def client_fixture(tmp_path, monkeypatch):
     """Function-scoped TestClient with isolated SQLite DB and temp upload dir."""
     import app.services.file_service as fs_module
     from app.core.config import settings
@@ -29,6 +50,9 @@ def client_fixture(tmp_path):
 
     original_db_url = settings.DATABASE_URL
     settings.DATABASE_URL = db_url  # Make background tasks use test DB
+
+    # Patch _run_engine so tests don't load the real Whisper model
+    monkeypatch.setattr(TranscriptionService, "_run_engine", _stub_engine)
 
     def override_get_session():
         with Session(engine) as session:
@@ -555,3 +579,58 @@ def test_delete_highlight(client):
     assert r.status_code == 204
     highlights = client.get(f"/api/v1/transcripts/{tid}/highlights").json()
     assert all(h["id"] != hl_id for h in highlights)
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Upload hardening
+# ---------------------------------------------------------------------------
+
+def test_upload_empty_file_rejected(client):
+    r = client.post(
+        "/api/v1/media/upload",
+        files={"files": ("empty.mp3", io.BytesIO(b""), "audio/mpeg")},
+    )
+    assert r.status_code == 400
+
+
+def test_upload_no_files_rejected(client):
+    r = client.post("/api/v1/media/upload")
+    assert r.status_code in (400, 422)
+
+
+def test_delete_media_removes_file(client):
+    from pathlib import Path
+
+    media = _upload_get_media(client)
+    media_id = media["id"]
+    file_path = Path(media["file_path"])
+    assert file_path.exists()
+
+    r = client.delete(f"/api/v1/media/{media_id}")
+    assert r.status_code == 204
+    assert not file_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Settings endpoints
+# ---------------------------------------------------------------------------
+
+def test_settings_endpoint(client):
+    r = client.get("/api/v1/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "app_name" in data
+    assert "app_env" in data
+    assert "storage_dir" in data
+    assert "database_url" in data
+    assert "transcription_model" in data
+
+
+def test_settings_runtime(client):
+    r = client.get("/api/v1/settings/runtime")
+    assert r.status_code == 200
+    data = r.json()
+    assert "model_size" in data
+    assert "device" in data
+    assert "compute_type" in data
+    assert data["device"] in ("cpu", "cuda")

@@ -12,6 +12,7 @@ import {
   Textarea,
   Tooltip,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { updateSegment } from "@/lib/api";
 
@@ -41,6 +42,11 @@ export default function TranscriptSegmentEditor({
         speaker_label: speakerLabel || null,
       });
       setEditing(false);
+      notifications.show({
+        color: "green",
+        title: "Segment saved",
+        message: "Your changes have been saved.",
+      });
       if (onSaved) onSaved(updated);
     } catch (err) {
       setError(err.message);

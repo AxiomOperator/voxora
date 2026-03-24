@@ -1,6 +1,14 @@
 "use client";
 
-import { Anchor, Badge, Skeleton, Stack, Table, Text } from "@mantine/core";
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Skeleton,
+  Stack,
+  Table,
+  Text,
+} from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getTranscripts } from "@/lib/api";
@@ -41,17 +49,25 @@ export default function TranscriptList({
 
   if (error) {
     return (
-      <Text size="sm" c="red">
-        Failed to load transcripts: {error}
-      </Text>
+      <Alert color="red" title="Failed to load transcripts">
+        {error}
+      </Alert>
     );
   }
 
   if (transcripts.length === 0) {
     return (
-      <Text size="sm" c="dimmed">
-        No transcripts yet. Upload a file and start a transcription job.
-      </Text>
+      <Stack align="center" py="xl" gap="xs">
+        <Text size="lg">📄</Text>
+        <Text fw={500}>No transcripts yet.</Text>
+        <Text size="sm" c="dimmed">
+          Start a transcription job from a{" "}
+          <Anchor component={Link} href="/jobs" size="sm">
+            media file
+          </Anchor>{" "}
+          to generate transcripts.
+        </Text>
+      </Stack>
     );
   }
 
