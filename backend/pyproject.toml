@@ -12,6 +12,7 @@ dependencies = [
     "httpx",
     "pytest",
     "pytest-anyio",
+    "aiofiles>=25.1.0",
 ]
 
 [build-system]

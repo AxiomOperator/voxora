@@ -68,7 +68,8 @@ export default function DashboardLayout({ children, queue, recent, stats }) {
             Navigation
           </Text>
           <NavLink component={Link} href="/dashboard" label="Dashboard" />
-          <NavLink component={Link} href="/dashboard" label="Media" />
+          <NavLink component={Link} href="/media" label="Media" />
+          <NavLink component={Link} href="/transcripts" label="Transcripts" />
         </Stack>
       </AppShell.Navbar>
 

@@ -1,27 +1,48 @@
 "use client";
 
-import { Badge, Group, Skeleton, Stack, Text } from "@mantine/core";
+import {
+  ActionIcon,
+  Anchor,
+  Badge,
+  Skeleton,
+  Stack,
+  Table,
+  Text,
+  Tooltip,
+} from "@mantine/core";
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getMedia } from "@/lib/api";
+import { deleteMedia, getMedia } from "@/lib/api";
 
-export default function MediaList() {
+export default function MediaList({ refreshTrigger }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshTrigger is an external reload signal
   useEffect(() => {
+    setLoading(true);
     getMedia()
       .then(setFiles)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshTrigger]);
+
+  async function handleDelete(id) {
+    try {
+      await deleteMedia(id);
+      setFiles((prev) => prev.filter((f) => f.id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   if (loading) {
     return (
       <Stack gap="xs">
-        <Skeleton height={24} radius="sm" />
-        <Skeleton height={24} radius="sm" />
-        <Skeleton height={24} radius="sm" />
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} height={36} radius="sm" />
+        ))}
       </Stack>
     );
   }
@@ -37,24 +58,66 @@ export default function MediaList() {
   if (files.length === 0) {
     return (
       <Text size="sm" c="dimmed">
-        No media files yet.
+        No media files yet. Upload one above.
       </Text>
     );
   }
 
   return (
-    <Stack gap="xs">
-      {files.map((file) => (
-        <Group key={file.id} justify="space-between" wrap="nowrap">
-          <Text size="sm" truncate>
-            {file.original_name}
-          </Text>
-          <Badge color={statusColor(file.status)} variant="light" size="sm">
-            {file.status}
-          </Badge>
-        </Group>
-      ))}
-    </Stack>
+    <Table striped highlightOnHover withTableBorder>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Name</Table.Th>
+          <Table.Th>Type</Table.Th>
+          <Table.Th>Size</Table.Th>
+          <Table.Th>Status</Table.Th>
+          <Table.Th>Uploaded</Table.Th>
+          <Table.Th />
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {files.map((file) => (
+          <Table.Tr key={file.id}>
+            <Table.Td>
+              <Anchor component={Link} href={`/media/${file.id}`} size="sm">
+                {file.original_name}
+              </Anchor>
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm" c="dimmed">
+                {file.mime_type}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm">{formatBytes(file.size_bytes)}</Text>
+            </Table.Td>
+            <Table.Td>
+              <Badge color={statusColor(file.status)} variant="light" size="sm">
+                {file.status}
+              </Badge>
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm" c="dimmed">
+                {new Date(file.created_at).toLocaleDateString()}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Tooltip label="Delete">
+                <ActionIcon
+                  color="red"
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => handleDelete(file.id)}
+                  aria-label="Delete media file"
+                >
+                  ✕
+                </ActionIcon>
+              </Tooltip>
+            </Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
   );
 }
 
@@ -69,4 +132,10 @@ function statusColor(status) {
     default:
       return "gray";
   }
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
