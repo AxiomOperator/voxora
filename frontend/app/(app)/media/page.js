@@ -1,12 +1,14 @@
+"use client";
+
 import { Container, Stack, Text, Title } from "@mantine/core";
+import { useState } from "react";
 import MediaList from "@/components/media/media-list";
+import MediaSearchBar from "@/components/media/media-search-bar";
 import UploadForm from "@/components/media/upload-form";
 
-export const metadata = {
-  title: "Media — Voxora",
-};
-
 export default function MediaPage() {
+  const [query, setQuery] = useState("");
+
   return (
     <Container size="lg" py="xl">
       <Stack gap="xl">
@@ -17,7 +19,8 @@ export default function MediaPage() {
           </Text>
         </div>
         <UploadForm />
-        <MediaList />
+        <MediaSearchBar onSearch={setQuery} />
+        <MediaList query={query} />
       </Stack>
     </Container>
   );

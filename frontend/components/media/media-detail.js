@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createJob, getJobs, getMediaItem } from "@/lib/api";
+import MediaAudioPlayer from "./media-audio-player";
 
 export default function MediaDetail({ mediaId }) {
   const [media, setMedia] = useState(null);
@@ -82,6 +83,8 @@ export default function MediaDetail({ mediaId }) {
           {media.status}
         </Badge>
       </Group>
+
+      <MediaAudioPlayer mediaId={media.id} mimeType={media.mime_type} />
 
       <Card withBorder radius="md" p="md">
         <Group justify="space-between" mb="sm">

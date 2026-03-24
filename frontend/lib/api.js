@@ -19,14 +19,31 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
+function buildQuery(params) {
+  if (!params) return "";
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== null && v !== "",
+  );
+  if (entries.length === 0) return "";
+  return `?${new URLSearchParams(entries).toString()}`;
+}
+
 // ── Media ──────────────────────────────────────────────────────────────────
 
-export function getMedia() {
-  return apiFetch("/api/v1/media");
+export function getMedia(params) {
+  return apiFetch(`/api/v1/media${buildQuery(params)}`);
 }
+
+export const getMediaList = getMedia;
 
 export function getMediaItem(mediaId) {
   return apiFetch(`/api/v1/media/${mediaId}`);
+}
+
+export const getMediaDetail = getMediaItem;
+
+export function getMediaStreamUrl(mediaId) {
+  return `${getApiBaseUrl()}/api/v1/media/${mediaId}/stream`;
 }
 
 export async function uploadMedia(file) {
@@ -54,25 +71,29 @@ export function deleteMedia(mediaId) {
 
 // ── Jobs ───────────────────────────────────────────────────────────────────
 
-export function getJobs() {
-  return apiFetch("/api/v1/jobs");
+export function getJobs(params) {
+  return apiFetch(`/api/v1/jobs${buildQuery(params)}`);
 }
 
 export function getJob(jobId) {
   return apiFetch(`/api/v1/jobs/${jobId}`);
 }
 
-export function createJob(mediaFileId, language = null) {
+export function createJob(mediaFileIdOrData, language = null) {
+  const body =
+    typeof mediaFileIdOrData === "object"
+      ? mediaFileIdOrData
+      : { media_file_id: mediaFileIdOrData, language };
   return apiFetch("/api/v1/jobs", {
     method: "POST",
-    body: JSON.stringify({ media_file_id: mediaFileId, language }),
+    body: JSON.stringify(body),
   });
 }
 
 // ── Transcripts ────────────────────────────────────────────────────────────
 
-export function getTranscripts() {
-  return apiFetch("/api/v1/transcripts");
+export function getTranscripts(params) {
+  return apiFetch(`/api/v1/transcripts${buildQuery(params)}`);
 }
 
 export function getTranscript(transcriptId) {
@@ -103,10 +124,12 @@ export function getSpeakers(transcriptId) {
   return apiFetch(`/api/v1/transcripts/${transcriptId}/speakers`);
 }
 
-export function updateSpeaker(transcriptId, speakerId, name) {
+export function updateSpeaker(transcriptId, speakerId, nameOrData) {
+  const body =
+    typeof nameOrData === "object" ? nameOrData : { name: nameOrData };
   return apiFetch(`/api/v1/transcripts/${transcriptId}/speakers/${speakerId}`, {
     method: "PATCH",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(body),
   });
 }
 

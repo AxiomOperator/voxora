@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from sqlmodel import select
@@ -6,6 +6,7 @@ from sqlmodel import select
 from app.dependencies import SessionDep
 from app.models.transcript import Transcript
 from app.models.transcript_segment import TranscriptSegment
+from app.models.media_file import MediaFile
 from app.schemas.transcript import TranscriptRead, TranscriptUpdate
 from app.schemas.transcript_segment import TranscriptSegmentRead, TranscriptSegmentUpdate
 from app.schemas.speaker import SpeakerRead, SpeakerUpdate
@@ -16,10 +17,19 @@ router = APIRouter()
 
 
 @router.get("", response_model=List[TranscriptRead])
-def list_transcripts(session: SessionDep):
-    return session.exec(
-        select(Transcript).order_by(Transcript.created_at.desc())
-    ).all()
+def list_transcripts(
+    session: SessionDep,
+    q: Optional[str] = Query(default=None),
+    media_name: Optional[str] = Query(default=None),
+):
+    stmt = select(Transcript).order_by(Transcript.created_at.desc())
+    if q:
+        stmt = stmt.where(Transcript.full_text.ilike(f"%{q}%"))
+    if media_name:
+        stmt = stmt.join(MediaFile, Transcript.media_file_id == MediaFile.id).where(
+            MediaFile.original_name.ilike(f"%{media_name}%")
+        )
+    return session.exec(stmt).all()
 
 
 @router.get("/{transcript_id}", response_model=TranscriptRead)

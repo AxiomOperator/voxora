@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlmodel import select
 from app.dependencies import SessionDep
 from app.models.media_file import MediaFile
@@ -44,6 +46,20 @@ async def upload_media(
     session.commit()
     session.refresh(media)
     return media
+
+
+@router.get("/{media_id}/stream")
+def stream_media(media_id: int, session: SessionDep):
+    media = session.get(MediaFile, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media file not found")
+    file_path = Path(media.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FileResponse(
+        path=str(file_path),
+        media_type=media.mime_type or "application/octet-stream",
+    )
 
 
 @router.delete("/{media_id}", status_code=204)

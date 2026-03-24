@@ -194,6 +194,9 @@ class TranscriptionService:
         session.add(transcript)
         session.commit()
         session.refresh(transcript)
+        job.transcript_id = transcript.id
+        session.add(job)
+        session.commit()
         return transcript
 
     def _persist_segments(

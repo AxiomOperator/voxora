@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { deleteMedia, getMedia } from "@/lib/api";
 
-export default function MediaList({ refreshTrigger }) {
+export default function MediaList({ refreshTrigger, query }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -55,10 +55,18 @@ export default function MediaList({ refreshTrigger }) {
     );
   }
 
-  if (files.length === 0) {
+  const displayed = query
+    ? files.filter((f) =>
+        f.original_name.toLowerCase().includes(query.toLowerCase()),
+      )
+    : files;
+
+  if (displayed.length === 0) {
     return (
       <Text size="sm" c="dimmed">
-        No media files yet. Upload one above.
+        {query
+          ? "No media files match your search."
+          : "No media files yet. Upload one above."}
       </Text>
     );
   }
@@ -76,7 +84,7 @@ export default function MediaList({ refreshTrigger }) {
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {files.map((file) => (
+        {displayed.map((file) => (
           <Table.Tr key={file.id}>
             <Table.Td>
               <Anchor component={Link} href={`/media/${file.id}`} size="sm">

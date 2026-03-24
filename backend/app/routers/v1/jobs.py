@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from sqlmodel import select
 
 from app.dependencies import SessionDep
@@ -24,10 +24,11 @@ def _run_transcription(job_id: int, db_url: str) -> None:
 
 
 @router.get("", response_model=List[TranscriptionJobRead])
-def list_jobs(session: SessionDep):
-    return session.exec(
-        select(TranscriptionJob).order_by(TranscriptionJob.created_at.desc())
-    ).all()
+def list_jobs(session: SessionDep, status: Optional[str] = Query(default=None)):
+    stmt = select(TranscriptionJob).order_by(TranscriptionJob.created_at.desc())
+    if status is not None:
+        stmt = stmt.where(TranscriptionJob.status == status)
+    return session.exec(stmt).all()
 
 
 @router.get("/{job_id}", response_model=TranscriptionJobRead)

@@ -18,7 +18,6 @@ import Link from "next/link";
 function ColorSchemeToggle() {
   const { setColorScheme } = useMantineColorScheme();
   const computed = useComputedColorScheme("dark");
-
   return (
     <ActionIcon
       variant="default"
@@ -31,9 +30,8 @@ function ColorSchemeToggle() {
   );
 }
 
-export default function DashboardLayout({ children, queue, recent, stats }) {
+export default function AppLayout({ children }) {
   const [opened, { toggle }] = useDisclosure();
-
   return (
     <AppShell
       header={{ height: 60 }}
@@ -67,22 +65,14 @@ export default function DashboardLayout({ children, queue, recent, stats }) {
           <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs">
             Navigation
           </Text>
-          <NavLink component={Link} href="/dashboard" label="Dashboard" />
+          <NavLink component={Link} href="/" label="Home" />
           <NavLink component={Link} href="/media" label="Media" />
           <NavLink component={Link} href="/transcripts" label="Transcripts" />
+          <NavLink component={Link} href="/dashboard" label="Dashboard" />
         </Stack>
       </AppShell.Navbar>
 
-      <AppShell.Main>
-        {children}
-        <Stack gap="md" mt="md">
-          {stats}
-          <Group align="flex-start" grow>
-            {queue}
-            {recent}
-          </Group>
-        </Stack>
-      </AppShell.Main>
+      <AppShell.Main>{children}</AppShell.Main>
     </AppShell>
   );
 }

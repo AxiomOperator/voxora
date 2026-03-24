@@ -15,3 +15,4 @@ class TranscriptionJob(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
+    transcript_id: Optional[int] = Field(default=None)

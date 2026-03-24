@@ -11,6 +11,7 @@ class TranscriptionJobCreate(BaseModel):
 class TranscriptionJobRead(BaseModel):
     id: int
     media_file_id: int
+    transcript_id: Optional[int]
     status: str
     language: Optional[str]
     error_message: Optional[str]

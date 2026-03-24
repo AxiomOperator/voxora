@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <Container size="md" py="xl" mt={60}>
+    <Container size="md" py="xl">
       <Stack align="center" gap="lg">
         <Title order={1}>Voxora</Title>
         <Text size="xl" c="dimmed" ta="center">

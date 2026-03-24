@@ -270,3 +270,83 @@ def test_export_invalid_format(client):
     tid = transcripts[0]["id"]
     r = client.get(f"/api/v1/transcripts/{tid}/export?format=docx")
     assert r.status_code == 422  # Query param validation rejects it
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Media stream
+# ---------------------------------------------------------------------------
+
+def test_media_stream_not_found(client):
+    r = client.get("/api/v1/media/99999/stream")
+    assert r.status_code == 404
+
+
+def test_media_stream_ok(client):
+    # Minimal valid WAV: RIFF header + empty data chunk
+    wav_bytes = (
+        b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00"
+        b"\x01\x00\x01\x00\x44\xac\x00\x00\x88X\x01\x00"
+        b"\x02\x00\x10\x00data\x00\x00\x00\x00"
+    )
+    r = _upload(client, filename="test.wav", content=wav_bytes, mime="audio/wav")
+    assert r.status_code == 201
+    media_id = r.json()["id"]
+    sr = client.get(f"/api/v1/media/{media_id}/stream")
+    assert sr.status_code == 200
+    assert "audio/wav" in sr.headers["content-type"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Transcript list filtering
+# ---------------------------------------------------------------------------
+
+def test_transcript_list_filter_q(client):
+    media_id = _upload(client).json()["id"]
+    _create_job_and_wait(client, media_id)
+    # Stub transcript contains the word "Stub"
+    r = client.get("/api/v1/transcripts?q=Stub")
+    assert r.status_code == 200
+    results = r.json()
+    assert isinstance(results, list)
+    assert len(results) >= 1
+
+    # Search for a word that won't appear
+    r2 = client.get("/api/v1/transcripts?q=xyzzy_not_present_anywhere")
+    assert r2.status_code == 200
+    assert r2.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Jobs list status filter
+# ---------------------------------------------------------------------------
+
+def test_jobs_list_status_filter(client):
+    media_id = _upload(client).json()["id"]
+    job = _create_job_and_wait(client, media_id)
+    job_id = job["id"]
+
+    # The background task runs synchronously in TestClient, so by now the job
+    # is either completed or failed — filter for its actual status
+    final_status = client.get(f"/api/v1/jobs/{job_id}").json()["status"]
+    r = client.get(f"/api/v1/jobs?status={final_status}")
+    assert r.status_code == 200
+    ids = [j["id"] for j in r.json()]
+    assert job_id in ids
+
+    # pending filter should not include this completed/failed job
+    r2 = client.get("/api/v1/jobs?status=pending")
+    assert r2.status_code == 200
+    ids2 = [j["id"] for j in r2.json()]
+    assert job_id not in ids2
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Job includes media_file_id (and transcript_id)
+# ---------------------------------------------------------------------------
+
+def test_job_includes_media_file_id(client):
+    media_id = _upload(client).json()["id"]
+    job = _create_job_and_wait(client, media_id)
+    assert "media_file_id" in job
+    assert job["media_file_id"] == media_id
+    assert "transcript_id" in job

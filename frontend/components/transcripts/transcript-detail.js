@@ -88,6 +88,15 @@ export default function TranscriptDetail({ transcriptId }) {
           <Text c="dimmed" size="sm" mt="xs">
             Media #{transcript.media_file_id} · Job #{transcript.job_id}
           </Text>
+          <Button
+            component={Link}
+            href={`/media/${transcript.media_file_id}`}
+            variant="subtle"
+            size="xs"
+            px={0}
+          >
+            View source media →
+          </Button>
         </div>
         <Group gap="sm">
           {transcript.detected_language && (

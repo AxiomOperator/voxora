@@ -5,17 +5,29 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getTranscripts } from "@/lib/api";
 
-export default function TranscriptList() {
-  const [transcripts, setTranscripts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+export default function TranscriptList({
+  items: itemsProp,
+  loading: loadingProp,
+  error: errorProp,
+}) {
+  const [internalTranscripts, setInternalTranscripts] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(
+    itemsProp === undefined,
+  );
+  const [internalError, setInternalError] = useState(null);
 
   useEffect(() => {
+    if (itemsProp !== undefined) return;
+    setInternalLoading(true);
     getTranscripts()
-      .then(setTranscripts)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+      .then(setInternalTranscripts)
+      .catch((err) => setInternalError(err.message))
+      .finally(() => setInternalLoading(false));
+  }, [itemsProp]);
+
+  const transcripts = itemsProp !== undefined ? itemsProp : internalTranscripts;
+  const loading = loadingProp !== undefined ? loadingProp : internalLoading;
+  const error = errorProp !== undefined ? errorProp : internalError;
 
   if (loading) {
     return (

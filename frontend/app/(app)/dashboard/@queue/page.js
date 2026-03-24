@@ -1,5 +1,4 @@
 import QueuePanel from "@/components/dashboard/queue-panel";
-
-export default function QueueDefault() {
+export default function QueueSlot() {
   return <QueuePanel />;
 }
