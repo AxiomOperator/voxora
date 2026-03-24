@@ -46,8 +46,13 @@ def client_fixture(tmp_path):
 def _upload(client, filename="test.mp3", content=b"audio", mime="audio/mpeg"):
     return client.post(
         "/api/v1/media/upload",
-        files={"file": (filename, io.BytesIO(content), mime)},
+        files={"files": (filename, io.BytesIO(content), mime)},
     )
+
+
+def _upload_get_media(client, filename="test.mp3", content=b"audio", mime="audio/mpeg"):
+    """Upload a single file and return the MediaFileRead dict."""
+    return _upload(client, filename, content, mime).json()[0]
 
 
 def _create_job_and_wait(client, media_id, language="en"):
@@ -78,19 +83,21 @@ def test_upload_media(client):
     r = _upload(client)
     assert r.status_code == 201
     data = r.json()
-    assert data["original_name"] == "test.mp3"
-    assert data["status"] == "pending"
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["original_name"] == "test.mp3"
+    assert data[0]["status"] == "pending"
 
 
 def test_get_media(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     r = client.get(f"/api/v1/media/{media_id}")
     assert r.status_code == 200
     assert r.json()["id"] == media_id
 
 
 def test_delete_media(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     assert client.delete(f"/api/v1/media/{media_id}").status_code == 204
     assert client.get(f"/api/v1/media/{media_id}").status_code == 404
 
@@ -104,7 +111,7 @@ def test_404_on_missing_media(client):
 # ---------------------------------------------------------------------------
 
 def test_create_job(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     job = _create_job_and_wait(client, media_id)
     assert job["media_file_id"] == media_id
     assert job["status"] in ("pending", "processing", "completed", "failed")
@@ -127,7 +134,7 @@ def test_list_transcripts(client):
 
 
 def test_transcript_created_after_job(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     # Give the background task time to complete (TestClient runs it synchronously)
     transcripts = client.get("/api/v1/transcripts").json()
@@ -135,7 +142,7 @@ def test_transcript_created_after_job(client):
 
 
 def test_get_transcript_segments(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if transcripts:
@@ -149,7 +156,7 @@ def test_get_transcript_segments(client):
 # ---------------------------------------------------------------------------
 
 def test_patch_transcript(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -161,7 +168,7 @@ def test_patch_transcript(client):
 
 
 def test_patch_segment(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -185,7 +192,7 @@ def test_patch_segment(client):
 # ---------------------------------------------------------------------------
 
 def test_get_speakers(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -197,7 +204,7 @@ def test_get_speakers(client):
 
 
 def test_rename_speaker(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -227,7 +234,7 @@ def test_rename_speaker(client):
 # ---------------------------------------------------------------------------
 
 def test_export_txt(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -239,7 +246,7 @@ def test_export_txt(client):
 
 
 def test_export_srt(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -250,7 +257,7 @@ def test_export_srt(client):
 
 
 def test_export_vtt(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -262,7 +269,7 @@ def test_export_vtt(client):
 
 
 def test_export_invalid_format(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     transcripts = client.get("/api/v1/transcripts").json()
     if not transcripts:
@@ -290,7 +297,7 @@ def test_media_stream_ok(client):
     )
     r = _upload(client, filename="test.wav", content=wav_bytes, mime="audio/wav")
     assert r.status_code == 201
-    media_id = r.json()["id"]
+    media_id = r.json()[0]["id"]
     sr = client.get(f"/api/v1/media/{media_id}/stream")
     assert sr.status_code == 200
     assert "audio/wav" in sr.headers["content-type"]
@@ -301,7 +308,7 @@ def test_media_stream_ok(client):
 # ---------------------------------------------------------------------------
 
 def test_transcript_list_filter_q(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     _create_job_and_wait(client, media_id)
     # Stub transcript contains the word "Stub"
     r = client.get("/api/v1/transcripts?q=Stub")
@@ -321,7 +328,7 @@ def test_transcript_list_filter_q(client):
 # ---------------------------------------------------------------------------
 
 def test_jobs_list_status_filter(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     job = _create_job_and_wait(client, media_id)
     job_id = job["id"]
 
@@ -345,8 +352,206 @@ def test_jobs_list_status_filter(client):
 # ---------------------------------------------------------------------------
 
 def test_job_includes_media_file_id(client):
-    media_id = _upload(client).json()["id"]
+    media_id = _upload_get_media(client)["id"]
     job = _create_job_and_wait(client, media_id)
     assert "media_file_id" in job
     assert job["media_file_id"] == media_id
     assert "transcript_id" in job
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Multi-file upload
+# ---------------------------------------------------------------------------
+
+def test_multi_file_upload(client):
+    r = client.post(
+        "/api/v1/media/upload",
+        files=[
+            ("files", ("a.mp3", io.BytesIO(b"audio1"), "audio/mpeg")),
+            ("files", ("b.mp3", io.BytesIO(b"audio2"), "audio/mpeg")),
+        ],
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) == 2
+    names = {d["original_name"] for d in data}
+    assert names == {"a.mp3", "b.mp3"}
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Batch job creation
+# ---------------------------------------------------------------------------
+
+def test_batch_job_creation(client):
+    m1 = _upload_get_media(client, filename="x.mp3")["id"]
+    m2 = _upload_get_media(client, filename="y.mp3")["id"]
+    r = client.post("/api/v1/jobs/batch", json={"media_file_ids": [m1, m2]})
+    assert r.status_code == 201
+    jobs = r.json()
+    assert isinstance(jobs, list)
+    assert len(jobs) == 2
+    media_ids = {j["media_file_id"] for j in jobs}
+    assert media_ids == {m1, m2}
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Job retry
+# ---------------------------------------------------------------------------
+
+def test_job_retry_success(client):
+    from sqlmodel import Session, create_engine
+    from app.core.config import settings
+
+    media_id = _upload_get_media(client)["id"]
+    job = _create_job_and_wait(client, media_id)
+    job_id = job["id"]
+
+    # Manually set job to failed via a direct DB update
+    engine = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
+    with Session(engine) as session:
+        from app.models.transcription_job import TranscriptionJob
+        db_job = session.get(TranscriptionJob, job_id)
+        db_job.status = "failed"
+        db_job.error_message = "simulated failure"
+        session.add(db_job)
+        session.commit()
+
+    r = client.post(f"/api/v1/jobs/{job_id}/retry")
+    assert r.status_code == 200
+    retried = r.json()
+    assert retried["status"] in ("pending", "processing", "completed", "failed")
+
+
+def test_job_retry_not_failed(client):
+    media_id = _upload_get_media(client)["id"]
+    # Create job but don't mark as failed
+    r = client.post("/api/v1/jobs", json={"media_file_id": media_id})
+    assert r.status_code == 201
+    job_id = r.json()["id"]
+
+    # The background task completes (completed or failed), only retry if not failed
+    status = client.get(f"/api/v1/jobs/{job_id}").json()["status"]
+    if status == "failed":
+        pytest.skip("Job happened to fail — can't test non-failed retry path")
+
+    r2 = client.post(f"/api/v1/jobs/{job_id}/retry")
+    assert r2.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Job detail
+# ---------------------------------------------------------------------------
+
+def test_get_job_detail(client):
+    media_id = _upload_get_media(client)["id"]
+    job = _create_job_and_wait(client, media_id)
+    job_id = job["id"]
+    r = client.get(f"/api/v1/jobs/{job_id}")
+    assert r.status_code == 200
+    detail = r.json()
+    assert detail["id"] == job_id
+    assert detail["media_file_id"] == media_id
+    assert "status" in detail
+    assert "created_at" in detail
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Chapters
+# ---------------------------------------------------------------------------
+
+def _get_transcript_id(client):
+    media_id = _upload_get_media(client)["id"]
+    _create_job_and_wait(client, media_id)
+    transcripts = client.get("/api/v1/transcripts").json()
+    if not transcripts:
+        pytest.skip("No transcripts available")
+    return transcripts[0]["id"]
+
+
+def test_create_chapter(client):
+    tid = _get_transcript_id(client)
+    r = client.post(
+        f"/api/v1/transcripts/{tid}/chapters",
+        json={"title": "Intro", "start_seconds": 0.0, "end_seconds": 30.0},
+    )
+    assert r.status_code == 201
+    ch = r.json()
+    assert ch["title"] == "Intro"
+    assert ch["transcript_id"] == tid
+    assert ch["start_seconds"] == 0.0
+    assert ch["end_seconds"] == 30.0
+
+
+def test_list_chapters(client):
+    tid = _get_transcript_id(client)
+    client.post(
+        f"/api/v1/transcripts/{tid}/chapters",
+        json={"title": "Second", "start_seconds": 60.0, "end_seconds": 120.0},
+    )
+    client.post(
+        f"/api/v1/transcripts/{tid}/chapters",
+        json={"title": "First", "start_seconds": 0.0, "end_seconds": 60.0},
+    )
+    r = client.get(f"/api/v1/transcripts/{tid}/chapters")
+    assert r.status_code == 200
+    chapters = r.json()
+    assert len(chapters) == 2
+    assert chapters[0]["start_seconds"] <= chapters[1]["start_seconds"]
+
+
+def test_update_chapter(client):
+    tid = _get_transcript_id(client)
+    ch = client.post(
+        f"/api/v1/transcripts/{tid}/chapters",
+        json={"title": "Old Title", "start_seconds": 0.0, "end_seconds": 10.0},
+    ).json()
+    ch_id = ch["id"]
+    r = client.patch(
+        f"/api/v1/transcripts/{tid}/chapters/{ch_id}",
+        json={"title": "New Title"},
+    )
+    assert r.status_code == 200
+    assert r.json()["title"] == "New Title"
+
+
+def test_delete_chapter(client):
+    tid = _get_transcript_id(client)
+    ch = client.post(
+        f"/api/v1/transcripts/{tid}/chapters",
+        json={"title": "To Delete", "start_seconds": 0.0, "end_seconds": 5.0},
+    ).json()
+    ch_id = ch["id"]
+    r = client.delete(f"/api/v1/transcripts/{tid}/chapters/{ch_id}")
+    assert r.status_code == 204
+    chapters = client.get(f"/api/v1/transcripts/{tid}/chapters").json()
+    assert all(c["id"] != ch_id for c in chapters)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Highlights
+# ---------------------------------------------------------------------------
+
+def test_create_highlight(client):
+    tid = _get_transcript_id(client)
+    r = client.post(
+        f"/api/v1/transcripts/{tid}/highlights",
+        json={"transcript_id": tid, "note": "Great point"},
+    )
+    assert r.status_code == 201
+    hl = r.json()
+    assert hl["transcript_id"] == tid
+    assert hl["note"] == "Great point"
+
+
+def test_delete_highlight(client):
+    tid = _get_transcript_id(client)
+    hl = client.post(
+        f"/api/v1/transcripts/{tid}/highlights",
+        json={"transcript_id": tid, "note": "To remove"},
+    ).json()
+    hl_id = hl["id"]
+    r = client.delete(f"/api/v1/transcripts/{tid}/highlights/{hl_id}")
+    assert r.status_code == 204
+    highlights = client.get(f"/api/v1/transcripts/{tid}/highlights").json()
+    assert all(h["id"] != hl_id for h in highlights)

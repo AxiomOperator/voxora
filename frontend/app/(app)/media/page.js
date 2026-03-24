@@ -2,9 +2,9 @@
 
 import { Container, Stack, Text, Title } from "@mantine/core";
 import { useState } from "react";
+import BatchUploadForm from "@/components/media/batch-upload-form";
 import MediaList from "@/components/media/media-list";
 import MediaSearchBar from "@/components/media/media-search-bar";
-import UploadForm from "@/components/media/upload-form";
 
 export default function MediaPage() {
   const [query, setQuery] = useState("");
@@ -18,7 +18,7 @@ export default function MediaPage() {
             Upload audio or video files to transcribe.
           </Text>
         </div>
-        <UploadForm />
+        <BatchUploadForm />
         <MediaSearchBar onSearch={setQuery} />
         <MediaList query={query} />
       </Stack>

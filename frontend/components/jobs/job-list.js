@@ -5,17 +5,19 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJobs } from "@/lib/api";
 
-export default function JobList() {
+export default function JobList({ status }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    getJobs()
+    setLoading(true);
+    setError(null);
+    getJobs(status && status !== "all" ? { status } : undefined)
       .then(setJobs)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [status]);
 
   if (loading) {
     return (
@@ -58,7 +60,9 @@ export default function JobList() {
         {jobs.map((job) => (
           <Table.Tr key={job.id}>
             <Table.Td>
-              <Text size="sm">#{job.id}</Text>
+              <Anchor component={Link} href={`/jobs/${job.id}`} size="sm">
+                #{job.id}
+              </Anchor>
             </Table.Td>
             <Table.Td>
               <Anchor

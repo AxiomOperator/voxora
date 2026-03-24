@@ -28,24 +28,27 @@ def get_media(media_id: int, session: SessionDep):
     return media
 
 
-@router.post("/upload", response_model=MediaFileRead, status_code=201)
+@router.post("/upload", response_model=List[MediaFileRead], status_code=201)
 async def upload_media(
     session: SessionDep,
-    file: UploadFile = File(...),
+    files: List[UploadFile] = File(...),
 ):
-    saved = await file_service.save_upload(file)
-    media = MediaFile(
-        original_name=file.filename or "upload",
-        stored_name=saved["stored_name"],
-        file_path=saved["file_path"],
-        mime_type=file.content_type or "application/octet-stream",
-        size_bytes=saved["size_bytes"],
-        status="pending",
-    )
-    session.add(media)
-    session.commit()
-    session.refresh(media)
-    return media
+    results = []
+    for file in files:
+        saved = await file_service.save_upload(file)
+        media = MediaFile(
+            original_name=file.filename or "upload",
+            stored_name=saved["stored_name"],
+            file_path=saved["file_path"],
+            mime_type=file.content_type or "application/octet-stream",
+            size_bytes=saved["size_bytes"],
+            status="pending",
+        )
+        session.add(media)
+        session.commit()
+        session.refresh(media)
+        results.append(media)
+    return results
 
 
 @router.get("/{media_id}/stream")

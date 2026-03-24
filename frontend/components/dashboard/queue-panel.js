@@ -11,25 +11,26 @@ import {
   Title,
 } from "@mantine/core";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import RetryJobButton from "@/components/jobs/retry-job-button";
 import { getJobs } from "@/lib/api";
 
 export default function QueuePanel() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getJobs()
-      .then((all) =>
-        setJobs(
-          all.filter(
-            (j) => j.status === "pending" || j.status === "processing",
-          ),
-        ),
-      )
-      .catch(() => {})
+      .then((all) => setJobs(all.slice(0, 8)))
+      .catch(() => {
+        /* silently fail */
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <Card withBorder radius="md" p="md" style={{ minWidth: 0 }}>
@@ -42,33 +43,52 @@ export default function QueuePanel() {
             <Skeleton height={20} />
           </Stack>
         : jobs.length === 0
-          ? <Stack gap="xs">
-              <Text size="sm" c="dimmed">
-                No jobs in queue.
-              </Text>
-              <Badge color="gray" variant="light">
-                0 active
-              </Badge>
-            </Stack>
+          ? <Text size="sm" c="dimmed">
+              No jobs yet.
+            </Text>
           : <Stack gap="xs">
-              {jobs.slice(0, 5).map((job) => (
-                <Group key={job.id} justify="space-between">
-                  <Anchor
-                    component={Link}
-                    href={`/media/${job.media_file_id}`}
-                    size="sm"
-                  >
-                    Media #{job.media_file_id}
+              {jobs.map((job) => (
+                <Group key={job.id} justify="space-between" wrap="nowrap">
+                  <Anchor component={Link} href={`/jobs/${job.id}`} size="sm">
+                    Job #{job.id} · Media #{job.media_file_id}
                   </Anchor>
-                  <Badge size="xs" color="yellow">
-                    {job.status}
-                  </Badge>
+                  <Group gap="xs">
+                    <Badge
+                      size="xs"
+                      color={statusColor(job.status)}
+                      variant="light"
+                    >
+                      {job.status}
+                    </Badge>
+                    {job.status === "failed" && (
+                      <RetryJobButton jobId={job.id} onRetried={load} />
+                    )}
+                    {job.status === "completed" && job.transcript_id && (
+                      <Anchor
+                        component={Link}
+                        href={`/transcripts/${job.transcript_id}`}
+                        size="xs"
+                      >
+                        Transcript
+                      </Anchor>
+                    )}
+                  </Group>
                 </Group>
               ))}
-              <Badge color="yellow" variant="light">
-                {jobs.length} active
-              </Badge>
             </Stack>}
     </Card>
   );
+}
+
+function statusColor(status) {
+  switch (status) {
+    case "completed":
+      return "green";
+    case "processing":
+      return "yellow";
+    case "failed":
+      return "red";
+    default:
+      return "gray";
+  }
 }

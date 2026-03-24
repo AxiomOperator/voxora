@@ -6,31 +6,41 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 
 ## Current Status
 
-**Phase 4 complete.** The following is fully implemented and working:
+**Phase 5 complete.** The following is fully implemented and working:
 
 - Structured FastAPI backend with versioned API routes under `/api/v1`
 - uv-managed Python project
 - SQLite database via SQLModel
-- Media upload (multipart), listing, and deletion
+- Media upload (multipart, multiple files), listing, and deletion
 - **Audio streaming** — `GET /api/v1/media/{id}/stream` serves uploaded files; media detail pages render an HTML5 audio player
 - Transcription job creation and background execution with `pending → processing → completed/failed` lifecycle
 - **Job status filtering** — `GET /api/v1/jobs?status=` filters the job list by status; jobs expose `transcript_id` for direct navigation to the output transcript
+- **Single job detail** — `GET /api/v1/jobs/{id}` returns full job metadata including `transcript_id`
+- **Batch job creation** — `POST /api/v1/jobs/batch` creates jobs for multiple media files in one request
+- **Job retry** — `POST /api/v1/jobs/{id}/retry` resets a failed job to `pending` and re-enqueues it
 - Transcript persistence with full text and ordered segments with timestamps
 - **Transcript search/filtering** — `GET /api/v1/transcripts?q=&media_name=` filters by transcript text or source media filename
 - Speaker model — segments carry `speaker_label`; `Speaker` rows are auto-synced from segments on job completion
 - Speaker renaming (`PATCH /api/v1/transcripts/{id}/speakers/{speaker_id}`)
 - Transcript segment inline editing (`PATCH /api/v1/transcripts/{id}/segments/{seg_id}`)
 - Transcript export in TXT, SRT, and VTT formats (`GET /api/v1/transcripts/{id}/export?format=txt|srt|vtt`)
+- **Chapters** — create titled chapter markers with start/end timestamps on a transcript; full CRUD via `GET/POST /api/v1/transcripts/{id}/chapters` and `PATCH/DELETE .../chapters/{chapter_id}`
+- **Highlights** — annotate segments with notes via `GET/POST /api/v1/transcripts/{id}/highlights` and `DELETE .../highlights/{highlight_id}`
 - GPU-detection boundary in `transcription_service.py` — falls back to stub when no real ASR is installed
 - Next.js App Router frontend, JavaScript-only, Mantine v7 UI
-- **Shared `(app)` route group** — all main pages (`/`, `/media`, `/media/[id]`, `/transcripts`, `/transcripts/[id]`, `/dashboard`) share a single AppShell layout via `app/(app)/layout.js`; root `app/layout.js` provides only html/body + MantineProvider
-- `/dashboard` with parallel routes (`@queue`, `@recent`, `@stats`) showing live counts, recent uploads, recent transcripts with links, and job queue with status badges
-- `/media` list page with client-side search bar filtering by original filename
+- **Shared `(app)` route group** — all main pages share a single AppShell layout via `app/(app)/layout.js`; root `app/layout.js` provides only html/body + Providers. Nav links: Home, Media, Transcripts, Jobs, Dashboard
+- `/dashboard` with parallel routes (`@queue`, `@recent`, `@stats`) showing live counts, recent uploads, recent transcripts with links, and job queue with status badges and retry actions
+- `/media` list page with client-side search bar and **batch upload form** for uploading multiple files at once followed by one-click batch transcription start
 - `/media/[id]` detail page with HTML5 audio player and "Start Transcription" action
 - `/transcripts` list page with search bar (filters by text content or media name)
-- Transcript detail is a full tabbed workspace: Segments (inline editing + speaker labels), Full Text, Speakers (rename)
-- **"View source media" link** on transcript detail navigates back to the originating media file
-- Export actions (download as TXT, SRT, VTT) on transcript detail
+- **Transcript detail — tabbed workspace:**
+  - **Workspace tab** — HTML5 audio player synced to segments (`PlaybackSyncPanel` highlights the active segment; clicking a segment seeks the player) + lightweight horizontal `TimelinePanel` with chapter markers and seekable playback position
+  - **Segments tab** — in-page text search filters segments in real-time; click any segment to seek the audio; inline text and speaker editing
+  - **Speakers tab** — rename speaker labels across all segments
+  - **Export tab** — download transcript as TXT, SRT, or VTT
+- **Chapter editor** — add, edit, and delete titled chapter markers directly from the transcript workspace
+- **Highlight editor** — annotate segments with free-text notes
+- `/jobs` list page and `/jobs/[jobId]` detail page inside the shared AppShell; failed jobs show a **Retry** button
 
 ---
 
@@ -44,7 +54,7 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 | ORM | [SQLModel](https://sqlmodel.tiangolo.com/) + SQLAlchemy |
 | Database | SQLite (local file) |
 | Config | pydantic-settings |
-| Backend tests | pytest + httpx (TestClient) |
+| Backend tests | pytest + httpx (TestClient) — 36 tests |
 | Frontend framework | [Next.js 15](https://nextjs.org/) (App Router) |
 | Frontend language | JavaScript only — no TypeScript |
 | UI library | [Mantine v7](https://mantine.dev/) |
@@ -67,19 +77,22 @@ voxora/
 │   │   ├── core/              (config, security)
 │   │   ├── db/                (database, init_db)
 │   │   ├── models/            (media_file, transcription_job, transcript,
-│   │   │                       transcript_segment, speaker)
+│   │   │                       transcript_segment, speaker, chapter, highlight)
 │   │   ├── schemas/           (matching schemas + update schemas per model)
 │   │   ├── routers/
 │   │   │   ├── health.py
-│   │   │   └── v1/            (api, media, jobs, transcripts, speakers)
-│   │   └── services/          (file, transcription, transcript, export)
-│   └── tests/
+│   │   │   └── v1/            (api, media, jobs, transcripts, speakers,
+│   │   │                       chapters, highlights)
+│   │   └── services/          (file, transcription, transcript, export,
+│   │                           job, chapter, highlight)
+│   └── tests/                 (36 tests)
 └── frontend/
     ├── app/
-    │   ├── layout.js          (root: html/body + MantineProvider)
+    │   ├── layout.js          (root: html/body + Providers)
     │   ├── loading.js
     │   └── (app)/
-    │       ├── layout.js      (shared AppShell — wraps all app pages)
+    │       ├── layout.js      (shared AppShell: Home, Media, Transcripts,
+    │       │                   Jobs, Dashboard)
     │       ├── page.js
     │       ├── media/
     │       │   ├── page.js
@@ -89,6 +102,10 @@ voxora/
     │       │   ├── page.js
     │       │   ├── loading.js
     │       │   └── [transcriptId]/page.js
+    │       ├── jobs/
+    │       │   ├── page.js
+    │       │   ├── loading.js
+    │       │   └── [jobId]/page.js
     │       └── dashboard/
     │           ├── layout.js
     │           ├── page.js
@@ -99,12 +116,17 @@ voxora/
     │   ├── providers.js
     │   ├── app-shell.js
     │   ├── dashboard/         (stats-panel, queue-panel, recent-panel)
-    │   ├── jobs/              (job-list, job-status-card)
-    │   ├── media/             (upload-form, media-list, media-detail,
-    │   │                       media-audio-player, media-search-bar)
+    │   ├── jobs/              (job-list, job-status-card, job-detail,
+    │   │                       retry-job-button)
+    │   ├── media/             (upload-form, batch-upload-form, media-list,
+    │   │                       media-detail, media-audio-player,
+    │   │                       media-search-bar)
     │   └── transcripts/       (transcript-list, transcript-detail,
     │                           transcript-segment-list, transcript-segment-editor,
-    │                           speaker-editor, export-actions, transcript-search-bar)
+    │                           speaker-editor, export-actions,
+    │                           transcript-search-bar, playback-sync-panel,
+    │                           timeline-panel, chapter-list, chapter-editor,
+    │                           highlight-list, highlight-editor)
     └── lib/
         ├── api.js
         └── env.js
@@ -118,12 +140,16 @@ voxora/
 - **All API routes are versioned** under `/api/v1/`. Do not add unversioned production endpoints.
 - **Service layer.** Business logic lives in `app/services/`, not in route handlers. Routers validate input, call services, and return schema responses.
 - **`transcription_service._run_engine()`** is the single extension point for plugging in a real ASR engine (Whisper, etc.). GPU detection runs at service startup and falls back cleanly when no GPU ASR library is present.
+- **`job_service.retry_job()`** resets `status` to `pending`, clears `error_message`, and re-enqueues the background task. The router delegates entirely to this service function.
+- **Chapters and highlights** each have their own model, schema, service, and router. Chapter routes carry `transcript_id` as a path parameter but are registered at the top-level router so they appear at `/api/v1/transcripts/{id}/chapters`. Highlight routes follow the same pattern.
 - **Speakers are auto-synced** from segment `speaker_label` values on job completion. `PATCH .../speakers/{id}` lets users assign a display name without altering the original label.
 - **Export service** returns raw file content with `Content-Disposition: attachment`, triggering a browser download.
 - **Stream endpoint** (`GET /api/v1/media/{id}/stream`) returns the stored file via `FileResponse` using the original MIME type. The frontend constructs the stream URL with `getMediaStreamUrl()` from `lib/api.js` and passes it directly to an `<audio>` element.
+- **PlaybackSyncPanel** listens to `timeupdate` events on the shared audio element and highlights the segment whose `[start, end]` window contains the current playback position. Clicking a segment sets `audio.currentTime` to seek the player.
+- **TimelinePanel** renders a lightweight horizontal bar; chapter markers are drawn at proportional positions. Clicking anywhere on the bar seeks the audio to the corresponding timestamp.
 - **SQLModel + SQLite.** The engine URL is controlled by `DATABASE_URL` in `.env`. Swapping to PostgreSQL requires only a connection string change.
 - **Local file storage.** Uploaded files are written to `backend/storage/uploads/` (configurable via `STORAGE_DIR`).
-- **Next.js App Router with `(app)` route group.** Root `app/layout.js` provides only the html/body wrapper and MantineProvider. The `app/(app)/layout.js` layout renders the AppShell with navbar and is shared by every app page (`/`, `/media`, `/media/[id]`, `/transcripts`, `/transcripts/[id]`, `/dashboard`). The `(app)` segment is invisible in URLs.
+- **Next.js App Router with `(app)` route group.** Root `app/layout.js` provides only the html/body wrapper and Providers. The `app/(app)/layout.js` layout renders the AppShell with navbar and is shared by every app page. The `(app)` segment is invisible in URLs.
 - **Parallel routes are used only on `/dashboard`** (`@queue`, `@recent`, `@stats`), which live inside `(app)/dashboard/` and extend the shared layout without re-rendering AppShell. Do not add parallel routes elsewhere without a clear architectural reason.
 - **JavaScript only.** The frontend contains no TypeScript. Do not introduce `.ts` or `.tsx` files.
 - **All backend calls go through `lib/api.js`.** Do not call `fetch()` directly in components. The module exports named helpers for every resource, including `getMediaStreamUrl()` which returns a plain URL string (not a Promise) for use in `src` attributes.
@@ -221,13 +247,15 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 |--------|------|-------------|
 | `GET` | `/api/v1/health` | Health check |
 | `GET` | `/api/v1/media` | List all media files (newest first) |
-| `POST` | `/api/v1/media/upload` | Upload a media file (multipart/form-data) |
+| `POST` | `/api/v1/media/upload` | Upload one or more media files (multipart/form-data); returns a list |
 | `GET` | `/api/v1/media/{id}` | Get a single media file |
 | `GET` | `/api/v1/media/{id}/stream` | Stream media file for in-browser playback |
 | `DELETE` | `/api/v1/media/{id}` | Delete a media file and its stored data |
 | `GET` | `/api/v1/jobs` | List transcription jobs (optional `?status=` filter) |
 | `POST` | `/api/v1/jobs` | Create a transcription job for a media file |
-| `GET` | `/api/v1/jobs/{id}` | Get a single job (includes `transcript_id` when complete) |
+| `GET` | `/api/v1/jobs/{id}` | Get a single job with full metadata including `transcript_id` |
+| `POST` | `/api/v1/jobs/batch` | Create jobs for multiple `media_file_ids` in one request |
+| `POST` | `/api/v1/jobs/{id}/retry` | Reset a failed job to `pending` and re-enqueue it |
 | `GET` | `/api/v1/transcripts` | List transcripts (optional `?q=` and `?media_name=` filters) |
 | `GET` | `/api/v1/transcripts/{id}` | Get transcript with full text |
 | `PATCH` | `/api/v1/transcripts/{id}` | Update transcript metadata |
@@ -236,24 +264,33 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 | `GET` | `/api/v1/transcripts/{id}/speakers` | List speakers (auto-synced from segments) |
 | `PATCH` | `/api/v1/transcripts/{id}/speakers/{speaker_id}` | Rename a speaker |
 | `GET` | `/api/v1/transcripts/{id}/export?format=txt\|srt\|vtt` | Download transcript as file |
+| `GET` | `/api/v1/transcripts/{id}/chapters` | List chapters for a transcript |
+| `POST` | `/api/v1/transcripts/{id}/chapters` | Create a chapter (title, start/end timestamps) |
+| `PATCH` | `/api/v1/transcripts/{id}/chapters/{chapter_id}` | Update a chapter |
+| `DELETE` | `/api/v1/transcripts/{id}/chapters/{chapter_id}` | Delete a chapter |
+| `GET` | `/api/v1/transcripts/{id}/highlights` | List highlights for a transcript |
+| `POST` | `/api/v1/transcripts/{id}/highlights` | Create a highlight (segment annotation with notes) |
+| `DELETE` | `/api/v1/transcripts/{id}/highlights/{highlight_id}` | Delete a highlight |
 
 ---
 
 ## Current Workflow
 
-1. **Visit `/media`** — use the search bar to filter existing files, or drop an audio/video file onto the upload zone
-2. **File is stored** on disk under `storage/uploads/` and a `MediaFile` record is created
-3. **Click the filename** to open the media detail page; the **audio player** lets you listen to the file immediately
-4. **Click "Start Transcription"** — a `TranscriptionJob` is created and runs in the background
-5. **Job progresses:** `pending → processing → completed` (or `failed`)
-6. **On completion**, `Transcript` and `TranscriptSegment` rows are persisted; `Speaker` rows are synced from segment labels; the job record exposes `transcript_id` for direct linking
+1. **Visit `/media`** — use the search bar to filter existing files, or use the **batch upload form** to drop one or more audio/video files onto the upload zone
+2. **Files are stored** on disk under `storage/uploads/` and `MediaFile` records are created; the batch upload form then offers a one-click **"Transcribe All"** action to start jobs for every uploaded file at once
+3. **Click a filename** to open the media detail page; the **audio player** lets you listen to the file immediately; click "Start Transcription" to queue a single job
+4. **Visit `/jobs`** — monitor all jobs with status badges (`pending`, `processing`, `completed`, `failed`); click a job for full detail; click **Retry** to re-enqueue any failed job
+5. **Job progresses:** `pending → processing → completed` (or `failed`); the job record exposes `transcript_id` for direct linking once complete
+6. **On completion**, `Transcript` and `TranscriptSegment` rows are persisted; `Speaker` rows are synced from segment labels
 7. **Visit `/transcripts`** — use the search bar to filter by transcript text or media filename; click a transcript to open the tabbed workspace:
-   - **Segments tab** — ordered segments with timestamps, speaker labels, and inline text editing
-   - **Full Text tab** — complete transcript text
+   - **Workspace tab** — audio player with playback-sync highlighting (active segment is highlighted in real-time; click any segment to seek); horizontal timeline bar showing chapter markers and current position
+   - **Segments tab** — in-page text search filters segments in real-time; inline text and speaker editing
    - **Speakers tab** — rename speaker labels across all segments
-8. **Click "View source media"** on the transcript detail page to jump back to the originating media file
-9. **Export** the transcript as TXT, SRT, or VTT from the export menu on the transcript detail page
-10. **Visit `/dashboard`** to see live stats counts, recent uploads, recent transcripts with direct links, and the job queue with status badges
+   - **Export tab** — download as TXT, SRT, or VTT
+8. **Add chapters** from the Workspace tab — mark key sections with a title and start/end timestamps; markers appear on the timeline
+9. **Add highlights** to annotate individual segments with free-text notes
+10. **Click "View source media"** on the transcript detail page to jump back to the originating media file
+11. **Visit `/dashboard`** to see live stats counts, recent uploads, recent transcripts with direct links, and the job queue with status badges
 
 > **Note:** The current transcription engine is a GPU-ready stub that returns placeholder text. Real ASR (e.g., Whisper) will be wired in during a future phase via the `_run_engine()` extension point in `app/services/transcription_service.py`.
 
@@ -263,8 +300,8 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 
 - Transcription engine is a GPU-ready stub — real ASR (Whisper, etc.) is not yet wired in
 - No user authentication
-- Audio player is basic HTML5 controls — no waveform visualisation or playback-sync highlighting
-- No batch job processing
+- Waveform visualisation is a basic timeline bar — no detailed audio waveform rendering
+- No batch export
 - SQLite only (PostgreSQL path is planned)
 - Speaker labels are placeholders until real diarization is added
 
@@ -297,10 +334,10 @@ The following items are planned for future phases and are **not yet implemented*
 - **Real ASR integration** — plug Whisper (or faster-whisper) into `_run_engine()` in `transcription_service.py`
 - **GPU-backed transcription** — load model onto CUDA device; the `_run_engine()` boundary is already in place
 - **Speaker diarization** — `speaker_label` field already exists on `TranscriptSegment`; pyannote.audio or similar
-- **Waveform visualisation with playback sync** — replace basic HTML5 controls with a synced waveform view
+- **Detailed waveform rendering with playback sync** — replace the timeline bar with a full waveform visualisation
 - **Transcript rich-text editing**
 - **Export to DOCX and JSON**
 - **PostgreSQL migration** — change `DATABASE_URL`; no ORM changes required
 - **Authentication and multi-user support** — JWT-based auth; `app/core/security.py` stub is ready
-- **Batch processing and job queue** — ARQ or Celery for long-running jobs and retry logic
+- **Background job orchestration** — ARQ or Celery for durable job queues
 - **Confidence scores per segment**

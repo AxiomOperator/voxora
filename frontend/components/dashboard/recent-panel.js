@@ -2,9 +2,8 @@
 
 import {
   Anchor,
-  Badge,
   Card,
-  Group,
+  Divider,
   Skeleton,
   Stack,
   Text,
@@ -12,23 +11,29 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getMedia } from "@/lib/api";
+import { getMedia, getTranscripts } from "@/lib/api";
 
 export default function RecentPanel() {
   const [files, setFiles] = useState([]);
+  const [transcripts, setTranscripts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getMedia()
-      .then((all) => setFiles(all.slice(0, 5)))
-      .catch(() => {})
+    Promise.all([getMedia(), getTranscripts()])
+      .then(([media, txs]) => {
+        setFiles(media.slice(0, 5));
+        setTranscripts(txs.slice(0, 5));
+      })
+      .catch(() => {
+        /* silently fail */
+      })
       .finally(() => setLoading(false));
   }, []);
 
   return (
     <Card withBorder radius="md" p="md" style={{ minWidth: 0 }}>
       <Title order={5} mb="sm">
-        Recent Files
+        Recent Activity
       </Title>
       {loading
         ? <Stack gap="xs">
@@ -36,45 +41,52 @@ export default function RecentPanel() {
             <Skeleton height={20} />
             <Skeleton height={20} />
           </Stack>
-        : files.length === 0
-          ? <Text size="sm" c="dimmed">
-              No media files yet.
-            </Text>
-          : <Stack gap="xs">
-              {files.map((f) => (
-                <Group key={f.id} justify="space-between" wrap="nowrap">
-                  <Anchor
-                    component={Link}
-                    href={`/media/${f.id}`}
-                    size="sm"
-                    truncate
-                  >
-                    {f.original_name}
-                  </Anchor>
-                  <Badge
-                    size="xs"
-                    color={statusColor(f.status)}
-                    variant="light"
-                    style={{ flexShrink: 0 }}
-                  >
-                    {f.status}
-                  </Badge>
-                </Group>
-              ))}
-            </Stack>}
+        : <Stack gap="md">
+            <div>
+              <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs">
+                Recent Media
+              </Text>
+              {files.length === 0
+                ? <Text size="sm" c="dimmed">
+                    No media files yet.
+                  </Text>
+                : <Stack gap={4}>
+                    {files.map((f) => (
+                      <Anchor
+                        key={f.id}
+                        component={Link}
+                        href={`/media/${f.id}`}
+                        size="sm"
+                        truncate
+                      >
+                        {f.original_name}
+                      </Anchor>
+                    ))}
+                  </Stack>}
+            </div>
+            <Divider />
+            <div>
+              <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs">
+                Recent Transcripts
+              </Text>
+              {transcripts.length === 0
+                ? <Text size="sm" c="dimmed">
+                    No transcripts yet.
+                  </Text>
+                : <Stack gap={4}>
+                    {transcripts.map((t) => (
+                      <Anchor
+                        key={t.id}
+                        component={Link}
+                        href={`/transcripts/${t.id}`}
+                        size="sm"
+                      >
+                        Transcript #{t.id}
+                      </Anchor>
+                    ))}
+                  </Stack>}
+            </div>
+          </Stack>}
     </Card>
   );
-}
-
-function statusColor(status) {
-  switch (status) {
-    case "done":
-      return "green";
-    case "processing":
-      return "yellow";
-    case "error":
-      return "red";
-    default:
-      return "gray";
-  }
 }

@@ -46,10 +46,15 @@ export function getMediaStreamUrl(mediaId) {
   return `${getApiBaseUrl()}/api/v1/media/${mediaId}/stream`;
 }
 
-export async function uploadMedia(file) {
+export async function uploadMedia(formDataOrFile) {
   const base = getApiBaseUrl();
-  const formData = new FormData();
-  formData.append("file", file);
+  let formData;
+  if (formDataOrFile instanceof FormData) {
+    formData = formDataOrFile;
+  } else {
+    formData = new FormData();
+    formData.append("file", formDataOrFile);
+  }
 
   const res = await fetch(`${base}/api/v1/media/upload`, {
     method: "POST",
@@ -144,4 +149,63 @@ export function getExportUrl(transcriptId, format) {
 
 export function getBackendHealth() {
   return apiFetch("/api/v1/health");
+}
+
+// ── Batch Jobs ─────────────────────────────────────────────────────────────
+
+export function createBatchJobs(mediaFileIds) {
+  return apiFetch("/api/v1/jobs/batch", {
+    method: "POST",
+    body: JSON.stringify({ media_file_ids: mediaFileIds }),
+  });
+}
+
+export function retryJob(id) {
+  return apiFetch(`/api/v1/jobs/${id}/retry`, { method: "POST" });
+}
+
+// ── Chapters ───────────────────────────────────────────────────────────────
+
+export function getChapters(transcriptId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/chapters`);
+}
+
+export function createChapter(transcriptId, data) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/chapters`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateChapter(transcriptId, chapterId, data) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/chapters/${chapterId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteChapter(transcriptId, chapterId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/chapters/${chapterId}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Highlights ─────────────────────────────────────────────────────────────
+
+export function getHighlights(transcriptId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/highlights`);
+}
+
+export function createHighlight(transcriptId, data) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/highlights`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteHighlight(transcriptId, highlightId) {
+  return apiFetch(
+    `/api/v1/transcripts/${transcriptId}/highlights/${highlightId}`,
+    { method: "DELETE" },
+  );
 }

@@ -68,6 +68,7 @@ export default function AppLayout({ children }) {
           <NavLink component={Link} href="/" label="Home" />
           <NavLink component={Link} href="/media" label="Media" />
           <NavLink component={Link} href="/transcripts" label="Transcripts" />
+          <NavLink component={Link} href="/jobs" label="Jobs" />
           <NavLink component={Link} href="/dashboard" label="Dashboard" />
         </Stack>
       </AppShell.Navbar>

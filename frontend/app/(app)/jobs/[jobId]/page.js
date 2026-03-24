@@ -1,0 +1,50 @@
+"use client";
+
+import { Alert, Center, Container, Loader } from "@mantine/core";
+import { use, useCallback, useEffect, useState } from "react";
+import JobDetail from "@/components/jobs/job-detail";
+import { getJob } from "@/lib/api";
+
+export default function JobDetailPage({ params }) {
+  const { jobId } = use(params);
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    getJob(jobId)
+      .then(setJob)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [jobId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Center h="40vh">
+        <Loader />
+      </Center>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert color="red" title="Error">
+        {error}
+      </Alert>
+    );
+  }
+
+  if (!job) return null;
+
+  return (
+    <Container size="lg" py="xl">
+      <JobDetail job={job} onRefresh={load} />
+    </Container>
+  );
+}

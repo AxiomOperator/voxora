@@ -3,3 +3,5 @@ from app.schemas.transcription_job import TranscriptionJobCreate, TranscriptionJ
 from app.schemas.transcript import TranscriptRead, TranscriptUpdate  # noqa: F401
 from app.schemas.transcript_segment import TranscriptSegmentRead, TranscriptSegmentUpdate  # noqa: F401
 from app.schemas.speaker import SpeakerRead, SpeakerUpdate  # noqa: F401
+from app.schemas.chapter import TranscriptChapterCreate, TranscriptChapterUpdate, TranscriptChapterRead  # noqa: F401
+from app.schemas.highlight import TranscriptHighlightCreate, TranscriptHighlightRead  # noqa: F401
