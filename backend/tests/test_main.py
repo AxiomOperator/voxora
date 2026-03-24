@@ -634,3 +634,221 @@ def test_settings_runtime(client):
     assert "device" in data
     assert "compute_type" in data
     assert data["device"] in ("cpu", "cuda")
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Projects
+# ---------------------------------------------------------------------------
+
+def test_create_project(client):
+    r = client.post("/api/v1/projects", json={"name": "Alpha", "description": "First project"})
+    assert r.status_code == 201
+    data = r.json()
+    assert data["name"] == "Alpha"
+    assert data["description"] == "First project"
+    assert "id" in data
+    assert "created_at" in data
+
+
+def test_list_projects(client):
+    client.post("/api/v1/projects", json={"name": "Project A"})
+    client.post("/api/v1/projects", json={"name": "Project B"})
+    r = client.get("/api/v1/projects")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) >= 2
+
+
+def test_update_project(client):
+    proj = client.post("/api/v1/projects", json={"name": "Old Name"}).json()
+    proj_id = proj["id"]
+    r = client.patch(f"/api/v1/projects/{proj_id}", json={"name": "New Name"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "New Name"
+
+
+def test_delete_project(client):
+    proj = client.post("/api/v1/projects", json={"name": "To Delete"}).json()
+    proj_id = proj["id"]
+    r = client.delete(f"/api/v1/projects/{proj_id}")
+    assert r.status_code == 204
+    assert client.get(f"/api/v1/projects/{proj_id}").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Notes
+# ---------------------------------------------------------------------------
+
+def test_create_note(client):
+    tid = _get_transcript_id(client)
+    r = client.post(
+        f"/api/v1/transcripts/{tid}/notes",
+        json={"transcript_id": tid, "content": "Important point", "start_seconds": 1.0},
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["content"] == "Important point"
+    assert data["transcript_id"] == tid
+    assert data["start_seconds"] == 1.0
+
+
+def test_list_notes(client):
+    tid = _get_transcript_id(client)
+    client.post(f"/api/v1/transcripts/{tid}/notes", json={"transcript_id": tid, "content": "Note 1"})
+    client.post(f"/api/v1/transcripts/{tid}/notes", json={"transcript_id": tid, "content": "Note 2"})
+    r = client.get(f"/api/v1/transcripts/{tid}/notes")
+    assert r.status_code == 200
+    assert len(r.json()) == 2
+
+
+def test_update_note(client):
+    tid = _get_transcript_id(client)
+    note = client.post(
+        f"/api/v1/transcripts/{tid}/notes",
+        json={"transcript_id": tid, "content": "Original"},
+    ).json()
+    note_id = note["id"]
+    r = client.patch(f"/api/v1/transcripts/{tid}/notes/{note_id}", json={"content": "Updated"})
+    assert r.status_code == 200
+    assert r.json()["content"] == "Updated"
+
+
+def test_delete_note(client):
+    tid = _get_transcript_id(client)
+    note = client.post(
+        f"/api/v1/transcripts/{tid}/notes",
+        json={"transcript_id": tid, "content": "To remove"},
+    ).json()
+    note_id = note["id"]
+    r = client.delete(f"/api/v1/transcripts/{tid}/notes/{note_id}")
+    assert r.status_code == 204
+    remaining = client.get(f"/api/v1/transcripts/{tid}/notes").json()
+    assert all(n["id"] != note_id for n in remaining)
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Review status
+# ---------------------------------------------------------------------------
+
+def test_update_review_status(client):
+    tid = _get_transcript_id(client)
+    r = client.patch(f"/api/v1/transcripts/{tid}", json={"review_status": "in_review"})
+    assert r.status_code == 200
+    assert r.json()["review_status"] == "in_review"
+
+
+def test_filter_transcripts_by_review_status(client):
+    tid = _get_transcript_id(client)
+    client.patch(f"/api/v1/transcripts/{tid}", json={"review_status": "reviewed"})
+    r = client.get("/api/v1/transcripts?review_status=reviewed")
+    assert r.status_code == 200
+    results = r.json()
+    assert any(t["id"] == tid for t in results)
+
+    r2 = client.get("/api/v1/transcripts?review_status=draft")
+    ids = [t["id"] for t in r2.json()]
+    assert tid not in ids
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Media project assignment
+# ---------------------------------------------------------------------------
+
+def test_assign_media_to_project(client):
+    proj = client.post("/api/v1/projects", json={"name": "Media Project"}).json()
+    proj_id = proj["id"]
+    media = _upload_get_media(client)
+    media_id = media["id"]
+    r = client.patch(f"/api/v1/media/{media_id}", json={"project_id": proj_id})
+    assert r.status_code == 200
+    assert r.json()["project_id"] == proj_id
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Prometheus metrics
+# ---------------------------------------------------------------------------
+
+def test_metrics_endpoint(client):
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert "text/plain" in r.headers["content-type"]
+    assert b"# HELP" in r.content or b"python_gc" in r.content or len(r.content) > 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Detailed health
+# ---------------------------------------------------------------------------
+
+def test_health_detailed(client):
+    r = client.get("/api/v1/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert data["service"] == "voxora-api"
+    assert "database" in data
+    assert "storage" in data
+    assert "timestamp" in data
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Diagnostics status
+# ---------------------------------------------------------------------------
+
+def test_diagnostics_status(client):
+    r = client.get("/api/v1/diagnostics/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "database" in data
+    assert "storage" in data
+    assert "gpu" in data
+    assert "transcription" in data
+    assert data["database"]["status"] in ("ok", "error")
+    assert data["transcription"]["model"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Job detail fields
+# ---------------------------------------------------------------------------
+
+def test_job_detail_fields(client):
+    media = _upload_get_media(client)
+    job = _create_job_and_wait(client, media["id"])
+    r = client.get(f"/api/v1/jobs/{job['id']}")
+    assert r.status_code == 200
+    data = r.json()
+    assert "error_message" in data
+    assert "transcript_id" in data
+    assert "runtime_metadata" in data
+    assert "started_at" in data
+    assert "completed_at" in data
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Retry flow
+# ---------------------------------------------------------------------------
+
+def test_job_retry_flow(client):
+    """Retry endpoint returns 200 when job is in failed state."""
+    from app.db.database import get_session
+    from app.models.transcription_job import TranscriptionJob
+    from sqlmodel import Session
+
+    media = _upload_get_media(client)
+    job = _create_job_and_wait(client, media["id"])
+    job_id = job["id"]
+
+    # Force job to 'failed' state via the overridden session
+    session_gen = app.dependency_overrides[get_session]()
+    session = next(session_gen)
+    db_job = session.get(TranscriptionJob, job_id)
+    db_job.status = "failed"
+    session.add(db_job)
+    session.commit()
+    try:
+        next(session_gen)
+    except StopIteration:
+        pass
+
+    r = client.post(f"/api/v1/jobs/{job_id}/retry")
+    assert r.status_code == 200
+    assert r.json()["status"] in ("pending", "processing")

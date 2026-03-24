@@ -2,31 +2,39 @@
 
 import { Badge, Card, Group, SimpleGrid, Skeleton, Text } from "@mantine/core";
 import { useEffect, useState } from "react";
-import { getJobs, getMedia, getRuntimeInfo, getTranscripts } from "@/lib/api";
+import { SystemStatusCard } from "@/components/dashboard/system-status-card";
+import {
+  getJobs,
+  getMedia,
+  getProjects,
+  getRuntimeInfo,
+  getTranscripts,
+} from "@/lib/api";
 
 export default function StatsPanel() {
   const [stats, setStats] = useState(null);
   const [runtime, setRuntime] = useState(null);
 
   useEffect(() => {
-    Promise.all([getMedia(), getJobs(), getTranscripts()])
-      .then(([media, jobs, transcripts]) => {
+    Promise.all([getMedia(), getJobs(), getTranscripts(), getProjects()])
+      .then(([media, jobs, transcripts, projects]) => {
         setStats({
           totalMedia: media.length,
           totalJobs: jobs.length,
           completedJobs: jobs.filter((j) => j.status === "completed").length,
           failedJobs: jobs.filter((j) => j.status === "failed").length,
           totalTranscripts: transcripts.length,
+          reviewedTranscripts: transcripts.filter(
+            (t) =>
+              t.review_status === "reviewed" || t.review_status === "exported",
+          ).length,
+          totalProjects: projects.length,
         });
       })
-      .catch(() => {
-        /* silently fail */
-      });
+      .catch(() => {});
     getRuntimeInfo()
       .then(setRuntime)
-      .catch(() => {
-        /* silently fail */
-      });
+      .catch(() => {});
   }, []);
 
   const items = [
@@ -43,10 +51,16 @@ export default function StatsPanel() {
       value: stats?.totalTranscripts ?? "—",
       color: "violet",
     },
+    {
+      label: "Reviewed Transcripts",
+      value: stats?.reviewedTranscripts ?? "—",
+      color: "teal",
+    },
+    { label: "Projects", value: stats?.totalProjects ?? "—", color: "orange" },
   ];
 
   return (
-    <SimpleGrid cols={{ base: 2, sm: 5 }}>
+    <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }}>
       {items.map((item) => (
         <Card key={item.label} withBorder radius="md" p="md">
           <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb="xs">
@@ -80,6 +94,7 @@ export default function StatsPanel() {
           </Group>
         </Card>
       )}
+      <SystemStatusCard />
     </SimpleGrid>
   );
 }

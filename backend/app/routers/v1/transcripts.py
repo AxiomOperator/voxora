@@ -21,14 +21,20 @@ def list_transcripts(
     session: SessionDep,
     q: Optional[str] = Query(default=None),
     media_name: Optional[str] = Query(default=None),
+    review_status: Optional[str] = Query(default=None),
+    project_id: Optional[int] = Query(default=None),
 ):
     stmt = select(Transcript).order_by(Transcript.created_at.desc())
     if q:
         stmt = stmt.where(Transcript.full_text.ilike(f"%{q}%"))
-    if media_name:
-        stmt = stmt.join(MediaFile, Transcript.media_file_id == MediaFile.id).where(
-            MediaFile.original_name.ilike(f"%{media_name}%")
-        )
+    if media_name or project_id is not None:
+        stmt = stmt.join(MediaFile, Transcript.media_file_id == MediaFile.id)
+        if media_name:
+            stmt = stmt.where(MediaFile.original_name.ilike(f"%{media_name}%"))
+        if project_id is not None:
+            stmt = stmt.where(MediaFile.project_id == project_id)
+    if review_status:
+        stmt = stmt.where(Transcript.review_status == review_status)
     return session.exec(stmt).all()
 
 

@@ -53,7 +53,7 @@ export async function uploadMedia(formDataOrFile) {
     formData = formDataOrFile;
   } else {
     formData = new FormData();
-    formData.append("file", formDataOrFile);
+    formData.append("files", formDataOrFile);
   }
 
   const res = await fetch(`${base}/api/v1/media/upload`, {
@@ -67,7 +67,9 @@ export async function uploadMedia(formDataOrFile) {
     throw new Error(`Upload error ${res.status}: ${text}`);
   }
 
-  return res.json();
+  // Backend returns a list; unwrap single-file uploads for convenience
+  const data = await res.json();
+  return Array.isArray(data) && data.length === 1 ? data[0] : data;
 }
 
 export function deleteMedia(mediaId) {
@@ -218,4 +220,87 @@ export function getSettings() {
 
 export function getRuntimeInfo() {
   return apiFetch("/api/v1/settings/runtime");
+}
+
+// ── Projects ───────────────────────────────────────────────────────────────
+
+export function getProjects() {
+  return apiFetch("/api/v1/projects");
+}
+
+export function getProject(id) {
+  return apiFetch(`/api/v1/projects/${id}`);
+}
+
+export function createProject(data) {
+  return apiFetch("/api/v1/projects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProject(id, data) {
+  return apiFetch(`/api/v1/projects/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteProject(id) {
+  return apiFetch(`/api/v1/projects/${id}`, { method: "DELETE" });
+}
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+
+export function getNotes(transcriptId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/notes`);
+}
+
+export function createNote(transcriptId, data) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/notes`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateNote(transcriptId, noteId, data) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteNote(transcriptId, noteId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/notes/${noteId}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Media update ───────────────────────────────────────────────────────────
+
+export function updateMedia(id, data) {
+  return apiFetch(`/api/v1/media/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ── Diagnostics ────────────────────────────────────────────────────────────
+
+export function getDiagnostics() {
+  return apiFetch("/api/v1/diagnostics/status");
+}
+
+export function getSystemHealth() {
+  return apiFetch("/api/v1/health");
+}
+
+// Check metrics endpoint availability (may fail with CORS — handle gracefully)
+export async function checkMetricsAvailability(baseUrl) {
+  try {
+    const res = await fetch(`${baseUrl}/metrics`, { method: "HEAD" });
+    return { available: res.ok, status: res.status };
+  } catch {
+    return { available: false, status: null };
+  }
 }

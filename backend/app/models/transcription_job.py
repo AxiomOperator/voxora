@@ -16,3 +16,4 @@ class TranscriptionJob(SQLModel, table=True):
     started_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
     transcript_id: Optional[int] = Field(default=None)
+    runtime_metadata: Optional[str] = Field(default=None)

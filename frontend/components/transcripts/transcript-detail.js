@@ -5,10 +5,9 @@ import {
   Badge,
   Button,
   Card,
-  Center,
   Group,
-  Loader,
   Modal,
+  Skeleton,
   Stack,
   Tabs,
   Text,
@@ -22,8 +21,10 @@ import { useEffect, useState } from "react";
 import {
   deleteChapter,
   deleteHighlight,
+  deleteNote,
   getChapters,
   getHighlights,
+  getNotes,
   getSpeakers,
   getTranscript,
   getTranscriptSegments,
@@ -33,7 +34,10 @@ import ChapterList from "./chapter-list";
 import ExportActions from "./export-actions";
 import HighlightEditor from "./highlight-editor";
 import HighlightList from "./highlight-list";
+import NoteEditor from "./note-editor";
+import NoteList from "./note-list";
 import PlaybackSyncPanel from "./playback-sync-panel";
+import ReviewStatusControl from "./review-status-control";
 import SpeakerEditor from "./speaker-editor";
 import TimelinePanel from "./timeline-panel";
 import TranscriptSegmentEditor from "./transcript-segment-editor";
@@ -61,13 +65,16 @@ export default function TranscriptDetail({ transcriptId }) {
   const [speakers, setSpeakers] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [highlights, setHighlights] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [segmentSearch, setSegmentSearch] = useState("");
   const [playbackTime, setPlaybackTime] = useState(0);
   const [editingChapter, setEditingChapter] = useState(null);
+  const [editingNote, setEditingNote] = useState(null);
   const [chapterModalOpened, chapterModal] = useDisclosure(false);
   const [highlightModalOpened, highlightModal] = useDisclosure(false);
+  const [noteModalOpened, noteModal] = useDisclosure(false);
 
   useEffect(() => {
     Promise.all([
@@ -76,13 +83,15 @@ export default function TranscriptDetail({ transcriptId }) {
       getSpeakers(transcriptId),
       getChapters(transcriptId),
       getHighlights(transcriptId),
+      getNotes(transcriptId),
     ])
-      .then(([t, segs, spks, chaps, highs]) => {
+      .then(([t, segs, spks, chaps, highs, nts]) => {
         setTranscript(t);
         setSegments(segs);
         setSpeakers(spks);
         setChapters(chaps);
         setHighlights(highs);
+        setNotes(nts);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -99,17 +108,19 @@ export default function TranscriptDetail({ transcriptId }) {
   function reloadChapters() {
     getChapters(transcriptId)
       .then(setChapters)
-      .catch(() => {
-        /* silently fail */
-      });
+      .catch(() => {});
   }
 
   function reloadHighlights() {
     getHighlights(transcriptId)
       .then(setHighlights)
-      .catch(() => {
-        /* silently fail */
-      });
+      .catch(() => {});
+  }
+
+  function reloadNotes() {
+    getNotes(transcriptId)
+      .then(setNotes)
+      .catch(() => {});
   }
 
   async function handleDeleteChapter(id) {
@@ -129,6 +140,19 @@ export default function TranscriptDetail({ transcriptId }) {
     try {
       await deleteHighlight(transcriptId, id);
       reloadHighlights();
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message: err.message,
+      });
+    }
+  }
+
+  async function handleDeleteNote(id) {
+    try {
+      await deleteNote(transcriptId, id);
+      reloadNotes();
     } catch (err) {
       notifications.show({
         color: "red",
@@ -158,6 +182,21 @@ export default function TranscriptDetail({ transcriptId }) {
     reloadHighlights();
   }
 
+  function handleAddNote() {
+    setEditingNote(null);
+    noteModal.open();
+  }
+
+  function handleEditNote(note) {
+    setEditingNote(note);
+    noteModal.open();
+  }
+
+  function handleNoteSaved() {
+    noteModal.close();
+    reloadNotes();
+  }
+
   function handleSeek(seconds) {
     setPlaybackTime(seconds);
   }
@@ -170,9 +209,22 @@ export default function TranscriptDetail({ transcriptId }) {
 
   if (loading) {
     return (
-      <Center h="40vh">
-        <Loader />
-      </Center>
+      <Stack gap="lg">
+        <Group justify="space-between">
+          <Stack gap="xs">
+            <Skeleton height={12} width={80} />
+            <Skeleton height={32} width={220} />
+            <Skeleton height={12} width={160} />
+          </Stack>
+          <Group gap="sm">
+            <Skeleton height={28} width={70} radius="xl" />
+            <Skeleton height={28} width={110} radius="sm" />
+            <Skeleton height={28} width={100} radius="sm" />
+          </Group>
+        </Group>
+        <Skeleton height={36} radius="sm" />
+        <Skeleton height={300} radius="md" />
+      </Stack>
     );
   }
 
@@ -215,12 +267,19 @@ export default function TranscriptDetail({ transcriptId }) {
             View source media →
           </Button>
         </div>
-        <Group gap="sm">
+        <Group gap="sm" align="center">
           {transcript.detected_language && (
             <Badge size="lg" variant="light">
               {transcript.detected_language}
             </Badge>
           )}
+          <ReviewStatusControl
+            transcriptId={transcriptId}
+            currentStatus={transcript.review_status ?? "draft"}
+            onUpdated={(updated) =>
+              setTranscript((prev) => ({ ...prev, ...updated }))
+            }
+          />
           <ExportActions transcriptId={transcriptId} />
         </Group>
       </Group>
@@ -231,6 +290,7 @@ export default function TranscriptDetail({ transcriptId }) {
           <Tabs.Tab value="segments">Segments ({segments.length})</Tabs.Tab>
           <Tabs.Tab value="speakers">Speakers ({speakers.length})</Tabs.Tab>
           <Tabs.Tab value="export">Export</Tabs.Tab>
+          <Tabs.Tab value="notes">Notes ({notes.length})</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="workspace" pt="md">
@@ -328,6 +388,26 @@ export default function TranscriptDetail({ transcriptId }) {
             </Card>
           </Stack>
         </Tabs.Panel>
+
+        <Tabs.Panel value="notes" pt="md">
+          <Stack gap="md">
+            <Group justify="space-between">
+              <Text fw={500}>Notes</Text>
+              <Button size="xs" variant="light" onClick={handleAddNote}>
+                + Add Note
+              </Button>
+            </Group>
+            {notes.length === 0
+              ? <Text size="sm" c="dimmed" py="sm">
+                  No notes yet. Add one below.
+                </Text>
+              : <NoteList
+                  notes={notes}
+                  onEdit={handleEditNote}
+                  onDelete={handleDeleteNote}
+                />}
+          </Stack>
+        </Tabs.Panel>
       </Tabs>
 
       <Text size="xs" c="dimmed">
@@ -357,6 +437,20 @@ export default function TranscriptDetail({ transcriptId }) {
           transcriptId={transcriptId}
           onSaved={handleHighlightSaved}
           onCancel={highlightModal.close}
+        />
+      </Modal>
+
+      <Modal
+        opened={noteModalOpened}
+        onClose={noteModal.close}
+        title={editingNote ? "Edit Note" : "Add Note"}
+      >
+        <NoteEditor
+          transcriptId={transcriptId}
+          note={editingNote}
+          segments={segments}
+          onSaved={handleNoteSaved}
+          onCancel={noteModal.close}
         />
       </Modal>
     </Stack>

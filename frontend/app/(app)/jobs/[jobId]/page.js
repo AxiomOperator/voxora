@@ -1,8 +1,9 @@
 "use client";
 
-import { Alert, Center, Container, Loader } from "@mantine/core";
+import { Alert, Center, Container, Loader, Stack } from "@mantine/core";
 import { use, useCallback, useEffect, useState } from "react";
 import JobDetail from "@/components/jobs/job-detail";
+import { JobRuntimePanel } from "@/components/jobs/job-runtime-panel";
 import { getJob } from "@/lib/api";
 
 export default function JobDetailPage({ params }) {
@@ -50,7 +51,10 @@ export default function JobDetailPage({ params }) {
 
   return (
     <Container size="lg" py="xl">
-      <JobDetail job={job} onRefresh={load} />
+      <Stack gap="lg">
+        <JobDetail job={job} onRefresh={load} />
+        <JobRuntimePanel job={job} onRefresh={load} />
+      </Stack>
     </Container>
   );
 }

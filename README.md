@@ -6,50 +6,59 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 
 ## Current Status
 
-**Phase 6 complete.** The following is fully implemented and working:
+**Phase 8 complete.** The following is fully implemented and working:
 
 - Structured FastAPI backend with versioned API routes under `/api/v1`
 - uv-managed Python project
-- SQLite database via SQLModel
+- SQLite database via SQLModel; new columns auto-migrated at startup
 - Media upload (multipart, multiple files), listing, and deletion
-  - **Upload hardening** — empty file uploads rejected (400); filenames sanitized (special chars replaced with underscores); delete keeps DB and disk in sync with clean success/not-found responses
-- **Audio streaming** — `GET /api/v1/media/{id}/stream` serves uploaded files; media detail pages render an HTML5 audio player
+  - Upload hardening — empty file uploads rejected (400); filenames sanitized; delete keeps DB and disk in sync
+- **Audio streaming** — `GET /api/v1/media/{id}/stream` serves uploaded files; media detail page renders an HTML5 audio player
 - **Real ASR transcription** via `faster-whisper` (WhisperModel) with lazy loading
   - CUDA detected automatically via `torch.cuda.is_available()` — uses `float16` on GPU, `int8` on CPU
   - Model size configured via `TRANSCRIPTION_MODEL` env var (default: `base`; supports `small`, `medium`, `large-v2`)
   - Optional default language hint via `TRANSCRIPTION_LANGUAGE` env var (default: auto-detect)
-  - `_run_engine()` is the single swap point for future model changes or diarization
 - **Non-blocking transcription jobs** — run via FastAPI `BackgroundTasks`; HTTP response returns immediately
 - Job lifecycle: `pending → processing → completed / failed`; error messages persisted on failure
-- **Job status filtering** — `GET /api/v1/jobs?status=` filters job list by status; jobs expose `transcript_id` for direct navigation
-- **Single job detail** — `GET /api/v1/jobs/{id}` returns full metadata including `transcript_id` and `error_message`
+- `TranscriptionJob` model carries a `runtime_metadata` field (JSON string, nullable) populated on completion
+- **Job status filtering** — `GET /api/v1/jobs?status=` filters job list by status
 - **Batch job creation** — `POST /api/v1/jobs/batch` creates jobs for multiple media files in one request
 - **Job retry** — `POST /api/v1/jobs/{id}/retry` resets a failed job to `pending` and re-enqueues it
 - Transcript persistence with full text, detected language, and ordered segments with timestamps
-- **Transcript search/filtering** — `GET /api/v1/transcripts?q=&media_name=` filters by transcript text or source media filename
+- **Transcript search/filtering** — `GET /api/v1/transcripts?q=&media_name=&status=` filters by text, source filename, or review status
+- **Review workflow** — transcripts carry a `review_status` field (`draft → in_review → reviewed → exported`); status badge shown in list; `PATCH /api/v1/transcripts/{id}` updates status
+- **Projects** — group media files and transcripts into named projects; full CRUD via `/api/v1/projects`; media and transcripts can be filtered by project
+- **Notes** — attach free-text notes to any transcript, optionally pinned to a specific segment; full CRUD via `GET/POST/PATCH/DELETE /api/v1/transcripts/{id}/notes`
 - Speaker model — segments carry `speaker_label`; `Speaker` rows are auto-synced from segments on job completion
-- Speaker renaming (`PATCH /api/v1/transcripts/{id}/speakers/{speaker_id}`)
+- Speaker workflow — `GET /api/v1/transcripts/{id}/speakers` lists speakers; `PATCH /api/v1/transcripts/{id}/speakers/{speaker_id}` renames a speaker across all segments
 - Transcript segment inline editing (`PATCH /api/v1/transcripts/{id}/segments/{seg_id}`)
-- Transcript export in TXT, SRT, and VTT formats (`GET /api/v1/transcripts/{id}/export?format=txt|srt|vtt`)
-- **Chapters** — create titled chapter markers with start/end timestamps on a transcript; full CRUD via `GET/POST /api/v1/transcripts/{id}/chapters` and `PATCH/DELETE .../chapters/{chapter_id}`
-- **Highlights** — annotate segments with notes via `GET/POST /api/v1/transcripts/{id}/highlights` and `DELETE .../highlights/{highlight_id}`
-- **Settings API** — `GET /api/v1/settings` returns app config; `GET /api/v1/settings/runtime` returns transcription engine info (model size, device, compute type); settings are read-only in Phase 6 (configured via `.env`)
+- Transcript export in TXT, SRT, VTT, and JSON formats (`GET /api/v1/transcripts/{id}/export?format=txt|srt|vtt|json`)
+- **Settings API** — `GET /api/v1/settings` returns app config; `PATCH /api/v1/settings` updates default language and model size; `GET /api/v1/settings/runtime` returns transcription engine info (model size, device, compute type)
+- **Prometheus metrics** — `GET /metrics` (at app root) exposes request counts and latencies in Prometheus format; ready for external scrapers
+- **Diagnostics API** — `GET /api/v1/diagnostics/status` returns structured system status: DB connectivity, storage path availability, GPU detection, and transcription runtime info
+- **Enriched health endpoint** — `GET /api/v1/health` now returns `status`, `database`, `storage`, and `timestamp`
 - Next.js App Router frontend, JavaScript-only, Mantine v7 UI
 - **Shared `(app)` route group** — all main pages share a single AppShell layout via `app/(app)/layout.js`; root `app/layout.js` provides only html/body + Providers
-- **Navigation** — AppShell nav links: Home · Media · Transcripts · Jobs · Dashboard · Settings
+- **Navigation** — AppShell nav links: Home · Media · Transcripts · Jobs · Projects · Dashboard · Settings
 - **Breadcrumbs** on every page (pathname-based)
-- **Improved error/empty states** — all list pages show a red Alert on fetch failure; empty states with contextual prompts (e.g., "No jobs yet — upload media to start"); failed job detail shows error message prominently with a Retry button; segment editor shows success notification after save; batch upload shows per-file results summary
-- `/dashboard` with parallel routes (`@queue`, `@recent`, `@stats`) showing live counts, recent uploads, recent transcripts, and job queue with status badges and retry actions
-- `/media` list page with client-side search bar and **batch upload form** for uploading multiple files at once followed by one-click batch transcription start
-- `/media/[id]` detail page with HTML5 audio player and "Start Transcription" action
-- `/transcripts` list page with search bar (filters by text content or media name)
+- **Improved error/empty states** — all list pages show an alert on fetch failure; empty states with contextual prompts
+- `/dashboard` with parallel routes (`@queue`, `@recent`, `@stats`) — live job queue, recently reviewed transcripts, stats panel, and a compact `SystemStatusCard` health widget
+- `/media` — list page with client-side search and batch upload form; each file links to its detail page
+- `/media/[id]` — detail page with HTML5 audio player and "Start Transcription" action; shows linked project
+- `/transcripts` — list page with search and filter by review status; status badge per transcript
 - **Transcript detail — tabbed workspace:**
-  - **Workspace tab** — HTML5 audio player synced to segments (`PlaybackSyncPanel` highlights the active segment; clicking a segment seeks the player) + lightweight horizontal `TimelinePanel` with chapter markers and seekable playback position; chapter editor inline
-  - **Segments tab** — in-page text search filters segments in real-time; click any segment to seek the audio; inline text and speaker editing with save success notification
+  - **Workspace tab** — HTML5 audio player synced to segments (`PlaybackSyncPanel` highlights the active segment; clicking a segment seeks the player) + timeline view; review status control
+  - **Segments tab** — in-page text search filters segments in real-time; inline text and speaker editing with save notification
   - **Speakers tab** — rename speaker labels across all segments
-  - **Export tab** — download transcript as TXT, SRT, or VTT
-- `/jobs` list page and `/jobs/[jobId]` detail page inside the shared AppShell; failed jobs show error message and a **Retry** button
-- `/settings` page — shows app configuration and transcription engine info (model, device, compute type)
+  - **Notes tab** — create, edit, and delete notes; optionally pin a note to a specific segment
+  - **Export tab** — download transcript as TXT, SRT, VTT, or JSON; skeleton loading state and empty state when no notes exist
+- `/jobs` — list page with status filter; `/jobs/[jobId]` detail page with `JobRuntimePanel` showing error details, timestamps, media/transcript links, and a Retry button
+- `/projects` — list, create, edit, and delete projects; `/projects/[projectId]` detail shows assigned media and transcripts
+- `/settings` — Mantine Tabs layout with three tabs:
+  - **General** — app configuration (default language, model size)
+  - **Runtime** — live system status badges for DB, storage, GPU, and transcription runtime (from diagnostics endpoint)
+  - **Metrics** — shows whether `GET /metrics` is reachable (for operators)
+- Backend: 57 tests (pytest + httpx TestClient)
 
 ---
 
@@ -64,7 +73,8 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 | ORM | [SQLModel](https://sqlmodel.tiangolo.com/) + SQLAlchemy |
 | Database | SQLite (local file) |
 | Config | pydantic-settings |
-| Backend tests | pytest + httpx (TestClient) — 41 tests |
+| Observability | [prometheus_client](https://github.com/prometheus/client_python) |
+| Backend tests | pytest + httpx (TestClient) — 57 tests |
 | Frontend framework | [Next.js 15](https://nextjs.org/) (App Router) |
 | Frontend language | JavaScript only — no TypeScript |
 | UI library | [Mantine v7](https://mantine.dev/) |
@@ -84,279 +94,201 @@ voxora/
 │   ├── storage/uploads/
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── core/              (config — includes TRANSCRIPTION_MODEL,
-│   │   │                       TRANSCRIPTION_LANGUAGE; security)
-│   │   ├── db/                (database, init_db)
+│   │   ├── dependencies.py
+│   │   ├── core/              (config.py, security.py)
+│   │   ├── db/                (database.py, init_db.py)
 │   │   ├── models/            (media_file, transcription_job, transcript,
-│   │   │                       transcript_segment, speaker, chapter, highlight)
+│   │   │                       transcript_segment, speaker, project, note)
 │   │   ├── schemas/           (matching schemas + update schemas per model)
-│   │   ├── routers/
-│   │   │   ├── health.py
-│   │   │   └── v1/            (api, media, jobs, transcripts, speakers,
-│   │   │                       chapters, highlights, settings)
+│   │   └── routers/
+│   │       ├── health.py
+│   │       └── v1/            (api, media, jobs, transcripts, speakers,
+│   │                           settings, projects, notes, diagnostics)
 │   │   └── services/          (file, transcription [faster-whisper],
-│   │                           transcript, export, job, chapter,
-│   │                           highlight, settings)
-│   └── tests/                 (41 tests)
+│   │                           transcript, export, job, settings,
+│   │                           project, note, diagnostics)
+│   └── tests/                 (57 tests)
+│       └── test_main.py
 └── frontend/
     ├── app/
-    │   ├── layout.js          (root: html/body + Providers)
+    │   ├── layout.js          (root: html/body + MantineProvider)
     │   ├── loading.js
     │   └── (app)/
-    │       ├── layout.js      (shared AppShell: Home, Media, Transcripts,
-    │       │                   Jobs, Dashboard, Settings + Breadcrumbs)
-    │       ├── page.js
-    │       ├── media/
-    │       │   ├── page.js
-    │       │   ├── loading.js
-    │       │   └── [mediaId]/page.js
-    │       ├── transcripts/
-    │       │   ├── page.js
-    │       │   ├── loading.js
-    │       │   └── [transcriptId]/page.js
-    │       ├── jobs/
-    │       │   ├── page.js
-    │       │   ├── loading.js
-    │       │   └── [jobId]/page.js
-    │       ├── settings/
-    │       │   ├── page.js
-    │       │   └── loading.js
-    │       └── dashboard/
-    │           ├── layout.js
-    │           ├── page.js
-    │           ├── @queue/
-    │           ├── @recent/
-    │           └── @stats/
+    │       ├── layout.js      (AppShell with nav — shared by all pages)
+    │       ├── page.js        (landing)
+    │       ├── media/         (list + [mediaId] detail)
+    │       ├── transcripts/   (list + [transcriptId] detail)
+    │       ├── jobs/          (list + [jobId] detail)
+    │       ├── projects/      (list + [projectId] detail)
+    │       ├── settings/      (Tabs: General / Runtime / Metrics)
+    │       └── dashboard/     (parallel routes: @queue, @recent, @stats)
     ├── components/
-    │   ├── providers.js
-    │   ├── app-shell.js
-    │   ├── breadcrumbs.js
-    │   ├── settings/          (settings-form.js, runtime-info.js)
-    │   ├── dashboard/         (stats-panel, queue-panel, recent-panel)
-    │   ├── jobs/              (job-list, job-status-card, job-detail,
-    │   │                       retry-job-button)
+    │   ├── app-shell.js, app-nav.js, app-header.js, breadcrumbs.js
+    │   ├── dashboard/         (queue-panel, recent-panel, stats-panel,
+    │   │                       system-status-card)
     │   ├── media/             (upload-form, batch-upload-form, media-list,
-    │   │                       media-detail, media-audio-player,
-    │   │                       media-search-bar)
-    │   └── transcripts/       (transcript-list, transcript-detail,
-    │                           segment-list, segment-editor,
-    │                           speaker-editor, export-actions,
-    │                           search-bar, playback-sync-panel,
-    │                           timeline-panel, chapter-list, chapter-editor,
-    │                           highlight-list, highlight-editor)
+    │   │                       media-detail, media-audio-player)
+    │   ├── jobs/              (job-list, job-detail, job-status-card,
+    │   │                       retry-job-button, job-filters, job-runtime-panel)
+    │   ├── transcripts/       (transcript-list, transcript-detail,
+    │   │                       transcript-segment-list,
+    │   │                       transcript-segment-editor, speaker-editor,
+    │   │                       export-actions, review-status-control,
+    │   │                       note-list, note-editor)
+    │   ├── projects/          (project-list, project-form, project-selector)
+    │   └── settings/          (settings-form, runtime-info, system-status,
+    │                           metrics-status)
     └── lib/
-        ├── api.js
+        ├── api.js             (all backend API calls)
         └── env.js
 ```
 
 ---
 
-## Architecture Notes
+## Getting Started
 
-- **Backend lives in `/backend`, frontend lives in `/frontend`.** They are separate projects with their own dependency management and dev servers.
-- **All API routes are versioned** under `/api/v1/`. Do not add unversioned production endpoints.
-- **Service layer.** Business logic lives in `app/services/`, not in route handlers. Routers validate input, call services, and return schema responses.
-- **`transcription_service._run_engine()`** is the single extension point for swapping ASR models or adding diarization. The rest of the job lifecycle (`process_job`) is model-agnostic.
-- **Lazy model loading.** `WhisperModel` is instantiated on the first transcription call, not at startup. `device` and `compute_type` are resolved at service init via `torch.cuda.is_available()`.
-- **`job_service.retry_job()`** resets `status` to `pending`, clears `error_message`, and re-enqueues the background task. The router delegates entirely to this service function.
-- **Settings service** reads from `Settings` (pydantic-settings) and the transcription service's `get_model_info()`. Settings are read-only in Phase 6; writing back to `.env` is planned.
-- **Upload hardening.** `file_service` rejects empty uploads with a 400 error and sanitizes filenames by replacing special characters with underscores before writing to disk.
-- **Chapters and highlights** each have their own model, schema, service, and router. Chapter routes carry `transcript_id` as a path parameter and are registered at the top-level router so they appear at `/api/v1/transcripts/{id}/chapters`. Highlight routes follow the same pattern.
-- **Speakers are auto-synced** from segment `speaker_label` values on job completion. `PATCH .../speakers/{id}` lets users assign a display name without altering the original label.
-- **Export service** returns raw file content with `Content-Disposition: attachment`, triggering a browser download.
-- **Stream endpoint** (`GET /api/v1/media/{id}/stream`) returns the stored file via `FileResponse` using the original MIME type. The frontend constructs the stream URL with `getMediaStreamUrl()` from `lib/api.js` and passes it directly to an `<audio>` element.
-- **PlaybackSyncPanel** listens to `timeupdate` events on the shared audio element and highlights the segment whose `[start, end]` window contains the current playback position. Clicking a segment sets `audio.currentTime` to seek the player.
-- **TimelinePanel** renders a lightweight horizontal bar; chapter markers are drawn at proportional positions. Clicking anywhere on the bar seeks the audio to the corresponding timestamp.
-- **Breadcrumbs** are rendered from the current pathname in the shared `(app)` layout — no per-page configuration required.
-- **SQLModel + SQLite.** The engine URL is controlled by `DATABASE_URL` in `.env`. Swapping to PostgreSQL requires only a connection string change.
-- **Local file storage.** Uploaded files are written to `backend/storage/uploads/` (configurable via `STORAGE_DIR`).
-- **Next.js App Router with `(app)` route group.** Root `app/layout.js` provides only the html/body wrapper and Providers. The `app/(app)/layout.js` layout renders the AppShell with navbar and breadcrumbs and is shared by every app page. The `(app)` segment is invisible in URLs.
-- **Parallel routes are used only on `/dashboard`** (`@queue`, `@recent`, `@stats`). Do not add parallel routes elsewhere without a clear architectural reason.
-- **JavaScript only.** The frontend contains no TypeScript. Do not introduce `.ts` or `.tsx` files.
-- **All backend calls go through `lib/api.js`.** Do not call `fetch()` directly in components. The module exports named helpers for every resource, including `getMediaStreamUrl()` which returns a plain URL string (not a Promise) for use in `src` attributes.
+### Prerequisites
 
----
-
-## Requirements
-
-- **Python 3.11+**
-- **[uv](https://github.com/astral-sh/uv)** — install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **Node.js 18+** with `npm`
-- **SQLite** — bundled with Python, no separate install needed
-- **NVIDIA GPU** with drivers and CUDA installed (`nvidia-smi` should work) — strongly recommended for faster transcription; CPU-only mode works but is significantly slower
-
----
-
-## Backend Setup
-
-```bash
-cd backend
-
-# Install dependencies (includes faster-whisper)
-uv sync
-
-# Configure environment
-cp .env.example .env
-# Edit .env if needed — set TRANSCRIPTION_MODEL and TRANSCRIPTION_LANGUAGE as desired
-
-# Initialise the database
-uv run python -m app.db.init_db
-
-# Run the development server
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-The API will be available at `http://localhost:8000`.  
-Interactive API docs: `http://localhost:8000/docs`
-
-### Running backend tests
-
-```bash
-cd backend
-uv run pytest tests/ -v
-```
-
----
-
-## Frontend Setup
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.local.example .env.local
-# Set NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-
-# Run the development server
-npm run dev
-```
-
-The frontend will be available at `http://localhost:3000`.
-
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `APP_NAME` | `Voxora` | Application name used in API responses |
-| `APP_ENV` | `development` | Enables SQLAlchemy echo logging in dev |
-| `DATABASE_URL` | `sqlite:///./voxora.db` | SQLAlchemy connection string |
-| `BACKEND_CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON array) |
-| `STORAGE_DIR` | `storage/uploads` | Directory for uploaded media files |
-| `TRANSCRIPTION_MODEL` | `base` | faster-whisper model size (`base`, `small`, `medium`, `large-v2`) |
-| `TRANSCRIPTION_LANGUAGE` | *(auto-detect)* | Default language hint for transcription (e.g. `en`, `fr`) |
-
-### Frontend (`frontend/.env.local`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Base URL of the FastAPI backend |
-
-All frontend components access the backend URL through `lib/env.js`. Do not read `process.env` directly in components.
-
----
-
-## API Overview
-
-The full interactive reference is available at `http://localhost:8000/docs` when the backend is running.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/health` | Health check |
-| `GET` | `/api/v1/media` | List all media files (newest first) |
-| `POST` | `/api/v1/media/upload` | Upload one or more media files (multipart/form-data); returns a list |
-| `GET` | `/api/v1/media/{id}` | Get a single media file |
-| `GET` | `/api/v1/media/{id}/stream` | Stream media file for in-browser playback |
-| `DELETE` | `/api/v1/media/{id}` | Delete a media file and its stored data |
-| `GET` | `/api/v1/jobs` | List transcription jobs (optional `?status=` filter) |
-| `POST` | `/api/v1/jobs` | Create a transcription job for a media file |
-| `GET` | `/api/v1/jobs/{id}` | Get a single job with full metadata including `transcript_id` and `error_message` |
-| `POST` | `/api/v1/jobs/batch` | Create jobs for multiple `media_file_ids` in one request |
-| `POST` | `/api/v1/jobs/{id}/retry` | Reset a failed job to `pending` and re-enqueue it |
-| `GET` | `/api/v1/transcripts` | List transcripts (optional `?q=` and `?media_name=` filters) |
-| `GET` | `/api/v1/transcripts/{id}` | Get transcript with full text and detected language |
-| `PATCH` | `/api/v1/transcripts/{id}` | Update transcript metadata |
-| `GET` | `/api/v1/transcripts/{id}/segments` | Get ordered timestamped segments |
-| `PATCH` | `/api/v1/transcripts/{id}/segments/{segment_id}` | Edit a segment's text |
-| `GET` | `/api/v1/transcripts/{id}/speakers` | List speakers (auto-synced from segments) |
-| `PATCH` | `/api/v1/transcripts/{id}/speakers/{speaker_id}` | Rename a speaker |
-| `GET` | `/api/v1/transcripts/{id}/export?format=txt\|srt\|vtt` | Download transcript as file |
-| `GET` | `/api/v1/transcripts/{id}/chapters` | List chapters for a transcript |
-| `POST` | `/api/v1/transcripts/{id}/chapters` | Create a chapter (title, start/end timestamps) |
-| `PATCH` | `/api/v1/transcripts/{id}/chapters/{chapter_id}` | Update a chapter |
-| `DELETE` | `/api/v1/transcripts/{id}/chapters/{chapter_id}` | Delete a chapter |
-| `GET` | `/api/v1/transcripts/{id}/highlights` | List highlights for a transcript |
-| `POST` | `/api/v1/transcripts/{id}/highlights` | Create a highlight (segment annotation with notes) |
-| `DELETE` | `/api/v1/transcripts/{id}/highlights/{highlight_id}` | Delete a highlight |
-| `GET` | `/api/v1/settings` | App configuration (name, env, storage dir, model, language) |
-| `GET` | `/api/v1/settings/runtime` | Transcription engine info (model size, device, compute type) |
-
----
-
-## Current Workflow
-
-1. **Upload one or multiple media files** at `/media` — files are validated (empty uploads rejected), filenames sanitized, stored locally, and `MediaFile` records created; the batch upload form shows a per-file results summary and offers one-click **"Transcribe All"**
-2. **Start transcription** — single job from the media detail page, or batch from the media list; HTTP response returns immediately (jobs run non-blocking in the background)
-3. **Job runs via faster-whisper** — GPU (CUDA float16) automatically if available, CPU (int8) otherwise; model loaded lazily on first job
-4. **Monitor at `/jobs`** — status badges (`pending`, `processing`, `completed`, `failed`); click a job for full detail; failed jobs show the error message prominently with a **Retry** button
-5. **Completed job** produces a timestamped transcript with detected language and speaker placeholders ("Speaker 1")
-6. **Review at `/transcripts/[id]`** — tabbed workspace:
-   - **Workspace tab** — audio playback synced to segments (active segment highlighted; click to seek); horizontal timeline with chapter markers and current playback position; chapter editor inline
-   - **Segments tab** — real-time text search; inline segment text and speaker editing with save success notification
-   - **Speakers tab** — rename speaker labels across all segments
-   - **Export tab** — download as TXT, SRT, or VTT
-7. **Check engine configuration** at `/settings` — see app settings and transcription engine info (model size, device, compute type)
-8. **Dashboard at `/dashboard`** — live stats, job queue with retry, recent media and transcripts
-
----
-
-## Current Limitations
-
-- Speaker diarization not yet implemented — all segments are labeled "Speaker 1"
-- No waveform rendering — the timeline is a simple bar, not a detailed waveform
-- Settings are read-only (env-var configured) — no in-app config changes yet
-- SQLite only — no PostgreSQL support yet
-- No user authentication
-- Single-machine local deployment only
-
----
-
-## Development Notes
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv) (`pip install uv` or see uv docs)
+- Node.js 18+ and npm
+- *(Optional)* NVIDIA GPU with CUDA for accelerated transcription
 
 ### Backend
 
-- **Add a new API resource:** create a model in `app/models/`, a schema in `app/schemas/`, a router in `app/routers/v1/`, and register it in `app/routers/v1/api.py`.
-- **Models must be imported** in `app/models/__init__.py` for `SQLModel.metadata.create_all()` to pick them up.
-- **Add business logic** in `app/services/`, not inside route handlers. Keep routers thin.
-- **All new endpoints go under `/api/v1/`.** Introduce `/api/v2/` for breaking changes rather than modifying existing routes.
-- **To swap the ASR engine**, override `_run_engine()` in `transcription_service.py`. Everything else (job lifecycle, persistence, speaker sync) remains unchanged.
+```bash
+cd backend
+uv venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+cp .env.example .env            # edit as needed
+uvicorn app.main:app --reload --port 8000
+```
+
+API docs available at [http://localhost:8000/docs](http://localhost:8000/docs).
 
 ### Frontend
 
-- **Add a new app page** by creating `app/(app)/<route>/page.js`. It automatically inherits the shared AppShell and breadcrumbs from `app/(app)/layout.js`. Add `loading.js` alongside it for Suspense fallback behaviour.
-- **Add shared components** under `components/<domain>/`.
-- **All backend calls go through `lib/api.js`.** Do not call `fetch()` directly in components.
-- **Stay JavaScript.** No TypeScript, no `.ts` or `.tsx` files.
-- **Parallel routes are for `/dashboard` only.** Do not create `@slot` directories in other routes.
-- **`'use client'`** is required only in components that use React hooks or browser APIs. Server components must not have it.
+```bash
+cd frontend
+npm install
+# create .env.local with: NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+npm run dev                     # runs on port 3000
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Configuration
+
+### Backend `.env` (copy from `.env.example`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_NAME` | `Voxora` | Application name |
+| `APP_ENV` | `development` | Environment |
+| `DATABASE_URL` | `sqlite:///./voxora.db` | SQLite database path |
+| `BACKEND_CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins |
+| `STORAGE_DIR` | `storage/uploads` | File upload directory |
+| `TRANSCRIPTION_MODEL` | `base` | Whisper model size (`tiny`, `base`, `small`, `medium`, `large-v2`) |
+| `TRANSCRIPTION_LANGUAGE` | *(empty)* | Default language hint; empty = auto-detect |
+
+### Frontend `.env.local`
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_BASE_URL` | Backend base URL (e.g. `http://localhost:8000`) |
+
+---
+
+## API Reference
+
+`GET /metrics` is mounted at the app root. All other routes are versioned under `/api/v1`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/metrics` | Prometheus-format metrics (request counts, latencies) |
+| `GET` | `/api/v1/health` | Health check — returns `status`, `database`, `storage`, `timestamp` |
+| `GET` | `/api/v1/diagnostics/status` | Full system status: DB, storage, GPU, transcription runtime |
+| `GET` `POST` | `/api/v1/media` | List / create media records |
+| `POST` | `/api/v1/media/upload` | Upload one or more files (multipart) |
+| `GET` `PATCH` `DELETE` | `/api/v1/media/{id}` | Get / update / delete a media file |
+| `GET` | `/api/v1/media/{id}/stream` | Stream uploaded audio/video |
+| `GET` `POST` | `/api/v1/jobs` | List / create transcription jobs |
+| `POST` | `/api/v1/jobs/batch` | Create jobs for multiple media files |
+| `POST` | `/api/v1/jobs/{id}/retry` | Retry a failed job |
+| `GET` | `/api/v1/jobs/{id}` | Get job detail |
+| `GET` `POST` | `/api/v1/transcripts` | List / create transcripts |
+| `GET` `PATCH` | `/api/v1/transcripts/{id}` | Get / update a transcript (incl. review_status) |
+| `GET` | `/api/v1/transcripts/{id}/export` | Export transcript (`?format=txt\|srt\|vtt\|json`) |
+| `GET` | `/api/v1/transcripts/{id}/speakers` | List speakers for a transcript |
+| `PATCH` | `/api/v1/transcripts/{id}/speakers/{speaker_id}` | Rename a speaker |
+| `GET` `POST` | `/api/v1/transcripts/{id}/notes` | List / create notes |
+| `PATCH` `DELETE` | `/api/v1/transcripts/{id}/notes/{note_id}` | Update / delete a note |
+| `GET` `POST` | `/api/v1/projects` | List / create projects |
+| `GET` `PATCH` `DELETE` | `/api/v1/projects/{id}` | Get / update / delete a project |
+| `GET` `PATCH` | `/api/v1/settings` | Get / update app settings |
+| `GET` | `/api/v1/settings/runtime` | Transcription engine info (device, model, compute type) |
+
+---
+
+## Typical Workflow
+
+1. Upload one or more audio/video files via `/media`
+2. Optionally group files into a project via `/projects`
+3. Start transcription jobs from the media detail page
+4. Monitor job queue on `/jobs` or `/dashboard`
+5. Check system health at `/settings` → Runtime tab
+6. When jobs complete, open a transcript on `/transcripts`
+7. Edit segment text and speaker labels
+8. Add notes to flag interesting moments
+9. Advance review status (`draft → in_review → reviewed`)
+10. Export the final transcript (TXT, SRT, VTT, or JSON)
+11. Filter past work by project, review status, or text search
+12. External monitoring can scrape `GET /metrics`
+
+---
+
+## Observability
+
+- `GET /metrics` returns Prometheus-format metrics (request counts, latencies) — ready for external scrapers; no Prometheus server or Grafana required
+- `GET /api/v1/diagnostics/status` provides structured health data: DB connectivity, storage availability, GPU detection, and transcription runtime info
+- `/settings` → **Runtime** tab surfaces live system status badges in the UI
+- `/settings` → **Metrics** tab shows whether `GET /metrics` is reachable (for operators)
+
+---
+
+## Running Tests
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest tests/ -v
+```
+
+57 tests covering health, diagnostics, media, jobs, transcripts, speakers, projects, notes, settings, and export.
+
+---
+
+## Known Limitations
+
+- **Single-user, local-only** — no authentication or multi-user support
+- **SQLite only** — no PostgreSQL support yet
+- **Polling only** — no real-time job progress (frontend polls on a timer)
+- **No speaker diarization** — speaker labels come from Whisper word-level output, not a dedicated diarization model
+- **No waveform editor** — the timeline panel is a lightweight placeholder; full waveform editing is not implemented
+- **No Prometheus server included** — `GET /metrics` exposes the endpoint; running Prometheus or Grafana is left to the operator
+- **No Docker or cloud deployment** — local development only
 
 ---
 
 ## Roadmap
 
-The following items are planned for future phases and are **not yet implemented**:
-
-- **Speaker diarization** — pyannote.audio or similar; `speaker_label` field already exists on `TranscriptSegment`
-- **Detailed waveform rendering with playback sync** — replace the timeline bar with a full waveform visualisation
-- **In-app settings editing** — write back to `.env` or DB-backed config; currently read-only
-- **Export to DOCX and JSON**
-- **PostgreSQL migration** — change `DATABASE_URL`; no ORM changes required
-- **Authentication and multi-user support** — JWT-based auth; `app/core/security.py` stub is ready
-- **Transcript confidence scores per segment**
-- **Batch export**
+- Real speaker diarization (e.g. pyannote.audio)
+- PostgreSQL support
+- Multi-user authentication
+- WebSocket job progress (replace polling)
+- Grafana dashboard configuration
+- Advanced waveform editing
+- Cloud storage (S3 / GCS)

@@ -5,3 +5,5 @@ from app.models.transcript_segment import TranscriptSegment  # noqa: F401
 from app.models.speaker import Speaker  # noqa: F401
 from app.models.chapter import TranscriptChapter  # noqa: F401
 from app.models.highlight import TranscriptHighlight  # noqa: F401
+from app.models.project import Project  # noqa: F401
+from app.models.note import TranscriptNote  # noqa: F401

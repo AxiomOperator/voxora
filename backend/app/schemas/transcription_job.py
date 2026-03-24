@@ -19,5 +19,6 @@ class TranscriptionJobRead(BaseModel):
     updated_at: datetime
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
+    runtime_metadata: Optional[str] = None
 
     model_config = {"from_attributes": True}

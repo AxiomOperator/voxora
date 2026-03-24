@@ -9,6 +9,9 @@ class TranscriptRead(BaseModel):
     job_id: int
     full_text: str
     detected_language: Optional[str]
+    review_status: str
+    last_reviewed_at: Optional[datetime]
+    review_notes: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -18,3 +21,6 @@ class TranscriptRead(BaseModel):
 class TranscriptUpdate(BaseModel):
     full_text: Optional[str] = None
     detected_language: Optional[str] = None
+    review_status: Optional[str] = None
+    review_notes: Optional[str] = None
+    last_reviewed_at: Optional[datetime] = None

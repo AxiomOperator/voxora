@@ -12,9 +12,11 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createJob, getJobs, getMediaItem } from "@/lib/api";
+import ProjectSelector from "@/components/projects/project-selector";
+import { createJob, getJobs, getMediaItem, updateMedia } from "@/lib/api";
 import MediaAudioPlayer from "./media-audio-player";
 
 export default function MediaDetail({ mediaId }) {
@@ -52,6 +54,22 @@ export default function MediaDetail({ mediaId }) {
     }
   }
 
+  async function handleProjectChange(projectId) {
+    try {
+      const updated = await updateMedia(mediaId, {
+        project_id: projectId ? Number(projectId) : null,
+      });
+      setMedia((prev) => ({ ...prev, project_id: updated.project_id }));
+      notifications.show({ color: "green", message: "Project updated" });
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Error",
+        message: err.message,
+      });
+    }
+  }
+
   if (loading) {
     return (
       <Center h="40vh">
@@ -85,6 +103,13 @@ export default function MediaDetail({ mediaId }) {
       </Group>
 
       <MediaAudioPlayer mediaId={media.id} mimeType={media.mime_type} />
+
+      <Card withBorder radius="md" p="md">
+        <ProjectSelector
+          value={media.project_id ?? null}
+          onChange={handleProjectChange}
+        />
+      </Card>
 
       <Card withBorder radius="md" p="md">
         <Group justify="space-between" mb="sm">

@@ -13,4 +13,5 @@ class MediaFile(SQLModel, table=True):
     mime_type: str
     size_bytes: int
     status: str = Field(default="pending")  # pending | processing | done | error
+    project_id: Optional[int] = Field(default=None, foreign_key="projects.id", index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

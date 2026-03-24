@@ -2,6 +2,7 @@
 
 import {
   Anchor,
+  Badge,
   Card,
   Divider,
   Skeleton,
@@ -16,6 +17,7 @@ import { getMedia, getTranscripts } from "@/lib/api";
 export default function RecentPanel() {
   const [files, setFiles] = useState([]);
   const [transcripts, setTranscripts] = useState([]);
+  const [reviewed, setReviewed] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,10 +25,17 @@ export default function RecentPanel() {
       .then(([media, txs]) => {
         setFiles(media.slice(0, 5));
         setTranscripts(txs.slice(0, 5));
+        setReviewed(
+          txs
+            .filter(
+              (t) =>
+                t.review_status === "reviewed" ||
+                t.review_status === "exported",
+            )
+            .slice(0, 5),
+        );
       })
-      .catch(() => {
-        /* silently fail */
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
@@ -81,6 +90,38 @@ export default function RecentPanel() {
                         href={`/transcripts/${t.id}`}
                         size="sm"
                       >
+                        Transcript #{t.id}
+                      </Anchor>
+                    ))}
+                  </Stack>}
+            </div>
+            <Divider />
+            <div>
+              <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs">
+                Recently Reviewed
+              </Text>
+              {reviewed.length === 0
+                ? <Text size="sm" c="dimmed">
+                    No reviewed transcripts yet.
+                  </Text>
+                : <Stack gap={4}>
+                    {reviewed.map((t) => (
+                      <Anchor
+                        key={t.id}
+                        component={Link}
+                        href={`/transcripts/${t.id}`}
+                        size="sm"
+                      >
+                        <Badge
+                          size="xs"
+                          color={
+                            t.review_status === "exported" ? "blue" : "green"
+                          }
+                          variant="light"
+                          mr={4}
+                        >
+                          {t.review_status}
+                        </Badge>
                         Transcript #{t.id}
                       </Anchor>
                     ))}

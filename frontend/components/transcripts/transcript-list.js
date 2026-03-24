@@ -13,10 +13,24 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getTranscripts } from "@/lib/api";
 
+function reviewStatusColor(status) {
+  switch (status) {
+    case "in_review":
+      return "yellow";
+    case "reviewed":
+      return "green";
+    case "exported":
+      return "blue";
+    default:
+      return "gray";
+  }
+}
+
 export default function TranscriptList({
   items: itemsProp,
   loading: loadingProp,
   error: errorProp,
+  filters,
 }) {
   const [internalTranscripts, setInternalTranscripts] = useState([]);
   const [internalLoading, setInternalLoading] = useState(
@@ -24,14 +38,17 @@ export default function TranscriptList({
   );
   const [internalError, setInternalError] = useState(null);
 
+  const filtersKey = filters ? JSON.stringify(filters) : "";
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filtersKey is a stable serialization of filters
   useEffect(() => {
     if (itemsProp !== undefined) return;
     setInternalLoading(true);
-    getTranscripts()
+    getTranscripts(filters ?? undefined)
       .then(setInternalTranscripts)
       .catch((err) => setInternalError(err.message))
       .finally(() => setInternalLoading(false));
-  }, [itemsProp]);
+  }, [itemsProp, filtersKey]);
 
   const transcripts = itemsProp !== undefined ? itemsProp : internalTranscripts;
   const loading = loadingProp !== undefined ? loadingProp : internalLoading;
@@ -77,6 +94,7 @@ export default function TranscriptList({
         <Table.Tr>
           <Table.Th>ID</Table.Th>
           <Table.Th>Language</Table.Th>
+          <Table.Th>Status</Table.Th>
           <Table.Th>Preview</Table.Th>
           <Table.Th>Created</Table.Th>
         </Table.Tr>
@@ -93,6 +111,19 @@ export default function TranscriptList({
               <Badge variant="light" size="sm">
                 {t.detected_language ?? "—"}
               </Badge>
+            </Table.Td>
+            <Table.Td>
+              {t.review_status
+                ? <Badge
+                    color={reviewStatusColor(t.review_status)}
+                    variant="light"
+                    size="sm"
+                  >
+                    {t.review_status.replace("_", " ")}
+                  </Badge>
+                : <Text size="sm" c="dimmed">
+                    —
+                  </Text>}
             </Table.Td>
             <Table.Td>
               <Text size="sm" lineClamp={1} maw={400}>

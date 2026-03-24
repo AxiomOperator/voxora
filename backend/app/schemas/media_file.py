@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -11,6 +12,10 @@ class MediaFileCreate(BaseModel):
     status: str = "pending"
 
 
+class MediaFileUpdate(BaseModel):
+    project_id: Optional[int] = None
+
+
 class MediaFileRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,4 +26,5 @@ class MediaFileRead(BaseModel):
     mime_type: str
     size_bytes: int
     status: str
+    project_id: Optional[int]
     created_at: datetime
