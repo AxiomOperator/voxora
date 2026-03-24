@@ -1,33 +1,30 @@
 # Voxora
 
-A local-first transcription platform built with FastAPI and Next.js. Upload audio or video files, run transcription jobs, and browse timestamped transcripts — all from a clean, dark-mode-capable web UI.
+A local-first transcription platform built with FastAPI and Next.js. Upload audio or video files, run transcription jobs, and browse, edit, and export timestamped transcripts — all from a clean, dark-mode-capable web UI.
 
 ---
 
 ## Current Status
 
-**Phase 2 complete.** The following is fully implemented and working:
+**Phase 3 complete.** The following is fully implemented and working:
 
 - Structured FastAPI backend with versioned API routes under `/api/v1`
-- Real multipart file upload with local disk storage
-- `MediaFile` persistence with list, detail, and delete endpoints
-- `TranscriptionJob` creation with background processing
-- `Transcript` and `TranscriptSegment` persistence (stub ASR engine in place)
-- Full transcript detail view with timestamped segments
-- Next.js App Router frontend with `/media`, `/transcripts`, and `/dashboard` routes
-- Mantine-based UI with dark mode default and color scheme toggle
-- Live dashboard panels showing real counts, active queue, and recent files
-
-**Not yet implemented (planned for future phases):**
-
-- Real ASR engine integration (Whisper or equivalent)
-- GPU-backed transcription via CUDA
-- Speaker diarization
-- Transcript editing
-- Export formats (SRT, VTT, plain text)
-- Job status polling / real-time updates
-- PostgreSQL migration
-- Authentication
+- uv-managed Python project
+- SQLite database via SQLModel
+- Media upload (multipart), listing, and deletion
+- Transcription job creation and background execution with `pending → processing → completed/failed` lifecycle
+- Transcript persistence with full text and ordered segments with timestamps
+- Speaker model — segments carry `speaker_label`; `Speaker` rows are auto-synced from segments on job completion
+- Speaker renaming (`PATCH /api/v1/transcripts/{id}/speakers/{speaker_id}`)
+- Transcript segment inline editing (`PATCH /api/v1/transcripts/{id}/segments/{seg_id}`)
+- Transcript export in TXT, SRT, and VTT formats (`GET /api/v1/transcripts/{id}/export?format=txt|srt|vtt`)
+- GPU-detection boundary in `transcription_service.py` — falls back to stub when no real ASR is installed
+- Next.js App Router frontend, JavaScript-only, Mantine v7 UI
+- `/dashboard` with parallel routes (`@queue`, `@recent`, `@stats`) showing live backend data
+- `/media` list and detail pages
+- `/transcripts` list and detail pages
+- Transcript detail is a full tabbed workspace: Segments (inline editing + speaker labels), Full Text, Speakers (rename)
+- Export actions (download as TXT, SRT, VTT) on transcript detail
 
 ---
 
@@ -39,15 +36,14 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 | Backend language | Python 3.11+ |
 | Backend package manager | [uv](https://github.com/astral-sh/uv) |
 | ORM | [SQLModel](https://sqlmodel.tiangolo.com/) + SQLAlchemy |
-| Database | SQLite (PostgreSQL-ready) |
-| File handling | python-multipart, aiofiles |
+| Database | SQLite (local file) |
 | Config | pydantic-settings |
-| Backend tests | pytest + FastAPI TestClient + httpx |
-| Frontend framework | [Next.js 16](https://nextjs.org/) (App Router) |
+| Backend tests | pytest + httpx (TestClient) |
+| Frontend framework | [Next.js 15](https://nextjs.org/) (App Router) |
 | Frontend language | JavaScript only — no TypeScript |
-| UI library | [Mantine v8](https://mantine.dev/) |
+| UI library | [Mantine v7](https://mantine.dev/) |
 | Frontend package manager | npm |
-| GPU environment | NVIDIA GPU + drivers available; CUDA transcription wired in a future phase |
+| GPU environment | NVIDIA GPU + drivers available; CUDA transcription planned for a future phase |
 
 ---
 
@@ -55,74 +51,72 @@ A local-first transcription platform built with FastAPI and Next.js. Upload audi
 
 ```
 voxora/
+├── README.md
 ├── backend/
+│   ├── pyproject.toml
+│   ├── .env.example
+│   ├── README.md
+│   ├── storage/uploads/
 │   ├── app/
-│   │   ├── main.py                  # FastAPI app, CORS, lifespan
-│   │   ├── dependencies.py          # Shared FastAPI dependencies (SessionDep)
+│   │   ├── main.py
+│   │   ├── dependencies.py
 │   │   ├── core/
-│   │   │   ├── config.py            # pydantic-settings Settings
-│   │   │   └── security.py          # Auth stub (future phase)
+│   │   │   ├── config.py
+│   │   │   └── security.py
 │   │   ├── db/
-│   │   │   ├── database.py          # SQLModel engine + get_session
-│   │   │   ├── init_db.py           # create_all tables
-│   │   │   └── migrations/          # Alembic placeholder (future phase)
+│   │   │   ├── database.py
+│   │   │   └── init_db.py
 │   │   ├── models/
 │   │   │   ├── media_file.py
 │   │   │   ├── transcription_job.py
 │   │   │   ├── transcript.py
-│   │   │   └── transcript_segment.py
+│   │   │   ├── transcript_segment.py
+│   │   │   └── speaker.py
 │   │   ├── schemas/
-│   │   │   ├── media_file.py
-│   │   │   ├── transcription_job.py
-│   │   │   ├── transcript.py
-│   │   │   └── transcript_segment.py
+│   │   │   └── (matching schemas + update schemas per model)
 │   │   ├── routers/
 │   │   │   ├── health.py
 │   │   │   └── v1/
-│   │   │       ├── api.py           # Aggregates all v1 routers
+│   │   │       ├── api.py
 │   │   │       ├── media.py
 │   │   │       ├── jobs.py
 │   │   │       └── transcripts.py
 │   │   └── services/
-│   │       ├── file_service.py      # Upload storage, filename generation
-│   │       └── transcription_service.py  # Job lifecycle + ASR engine boundary
-│   ├── storage/
-│   │   └── uploads/                 # Uploaded media files (local)
-│   ├── tests/
-│   │   └── test_main.py
-│   ├── .env.example
-│   ├── pyproject.toml
-│   └── README.md
-│
+│   │       ├── file_service.py
+│   │       ├── transcription_service.py
+│   │       ├── transcript_service.py
+│   │       └── export_service.py
+│   └── tests/
+│       └── test_main.py
 └── frontend/
     ├── app/
-    │   ├── layout.js                # Root layout (Providers, Mantine)
-    │   ├── page.js                  # Landing page
+    │   ├── layout.js
+    │   ├── page.js
     │   ├── loading.js
     │   ├── dashboard/
-    │   │   ├── layout.js            # AppShell + parallel slot rendering
+    │   │   ├── layout.js
     │   │   ├── page.js
-    │   │   ├── @queue/              # Active job queue slot
-    │   │   ├── @recent/             # Recent files slot
-    │   │   └── @stats/              # Live counts slot
+    │   │   ├── @queue/
+    │   │   ├── @recent/
+    │   │   └── @stats/
     │   ├── media/
-    │   │   ├── page.js              # Upload form + media list
-    │   │   └── [mediaId]/
-    │   │       └── page.js          # Media detail + job management
-    │   ├── transcripts/
-    │   │   ├── page.js              # Transcript list
-    │   │   └── [transcriptId]/
-    │   │       └── page.js          # Transcript detail + segments
-    │   └── api/health/route.js      # Local health route (proxies backend)
+    │   │   ├── page.js
+    │   │   └── [mediaId]/page.js
+    │   └── transcripts/
+    │       ├── page.js
+    │       └── [transcriptId]/page.js
     ├── components/
-    │   ├── providers.js             # MantineProvider + Notifications
-    │   ├── dashboard/               # Stats, queue, recent panels
-    │   ├── media/                   # UploadForm, MediaList, MediaDetail
-    │   ├── jobs/                    # JobStatusCard
-    │   └── transcripts/             # TranscriptList, TranscriptDetail, SegmentList
+    │   ├── providers.js
+    │   ├── app-shell.js
+    │   ├── dashboard/         (stats-panel, queue-panel, recent-panel)
+    │   ├── jobs/              (job-list, job-status-card)
+    │   ├── media/             (upload-form, media-list, media-detail)
+    │   └── transcripts/       (transcript-list, transcript-detail,
+    │                           transcript-segment-list, transcript-segment-editor,
+    │                           speaker-editor, export-actions)
     └── lib/
-        ├── api.js                   # All backend API calls
-        └── env.js                   # Centralised env variable access
+        ├── api.js
+        └── env.js
 ```
 
 ---
@@ -132,12 +126,15 @@ voxora/
 - **Backend lives in `/backend`, frontend lives in `/frontend`.** They are separate projects with their own dependency management and dev servers.
 - **All API routes are versioned** under `/api/v1/`. Do not add unversioned production endpoints.
 - **Service layer.** Business logic lives in `app/services/`, not in route handlers. Routers validate input, call services, and return schema responses.
-- **SQLModel + SQLite.** The engine URL is controlled by `DATABASE_URL` in `.env`. Swapping to PostgreSQL requires only a connection string change — no ORM changes needed.
-- **Local file storage.** Uploaded files are written to `backend/storage/uploads/` (configurable via `STORAGE_DIR`). Cloud storage is a future concern.
+- **`transcription_service._run_engine()`** is the single extension point for plugging in a real ASR engine (Whisper, etc.). GPU detection runs at service startup and falls back cleanly when no GPU ASR library is present.
+- **Speakers are auto-synced** from segment `speaker_label` values on job completion. `PATCH .../speakers/{id}` lets users assign a display name without altering the original label.
+- **Export service** returns raw file content with `Content-Disposition: attachment`, triggering a browser download.
+- **SQLModel + SQLite.** The engine URL is controlled by `DATABASE_URL` in `.env`. Swapping to PostgreSQL requires only a connection string change.
+- **Local file storage.** Uploaded files are written to `backend/storage/uploads/` (configurable via `STORAGE_DIR`).
 - **Next.js App Router.** All frontend routes use App Router conventions (`layout.js`, `page.js`, `loading.js`). No Pages Router.
 - **Parallel routes are used only on `/dashboard`** (`@queue`, `@recent`, `@stats`). Do not add parallel routes elsewhere without a clear architectural reason.
 - **JavaScript only.** The frontend contains no TypeScript. Do not introduce `.ts` or `.tsx` files.
-- **Mantine is the sole UI library.** Do not add other component libraries.
+- **All backend calls go through `lib/api.js`.** Do not call `fetch()` directly in components.
 
 ---
 
@@ -147,7 +144,7 @@ voxora/
 - **[uv](https://github.com/astral-sh/uv)** — install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Node.js 18+** with `npm`
 - **SQLite** — bundled with Python, no separate install needed
-- **NVIDIA GPU** with drivers installed (`nvidia-smi` should work) — not yet used by the application, but the environment is assumed present for the transcription phase
+- **NVIDIA GPU** with drivers installed (`nvidia-smi` should work) — not yet used by the application, but the environment is assumed present for the real ASR phase
 
 ---
 
@@ -156,9 +153,6 @@ voxora/
 ```bash
 cd backend
 
-# Create virtual environment
-uv venv
-
 # Install dependencies
 uv sync
 
@@ -166,14 +160,15 @@ uv sync
 cp .env.example .env
 # Edit .env if needed (defaults work for local development)
 
+# Initialise the database
+uv run python -m app.db.init_db
+
 # Run the development server
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 The API will be available at `http://localhost:8000`.  
 Interactive API docs: `http://localhost:8000/docs`
-
-The database (`voxora.db`) and upload storage (`storage/uploads/`) are created automatically on first run.
 
 ### Running backend tests
 
@@ -189,12 +184,12 @@ uv run pytest tests/ -v
 ```bash
 cd frontend
 
-# Install dependencies (only needed once or after package changes)
+# Install dependencies
 npm install
 
 # Configure environment
 cp .env.local.example .env.local
-# Set NEXT_PUBLIC_API_BASE_URL if your backend runs on a non-default port
+# Set NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 # Run the development server
 npm run dev
@@ -240,9 +235,14 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 | `GET` | `/api/v1/jobs` | List transcription jobs |
 | `POST` | `/api/v1/jobs` | Create a transcription job for a media file |
 | `GET` | `/api/v1/jobs/{id}` | Get a single job |
-| `GET` | `/api/v1/transcripts` | List all transcripts |
+| `GET` | `/api/v1/transcripts` | List all transcripts (newest first) |
 | `GET` | `/api/v1/transcripts/{id}` | Get transcript with full text |
-| `GET` | `/api/v1/transcripts/{id}/segments` | Get timestamped segments for a transcript |
+| `PATCH` | `/api/v1/transcripts/{id}` | Update transcript metadata |
+| `GET` | `/api/v1/transcripts/{id}/segments` | Get ordered timestamped segments |
+| `PATCH` | `/api/v1/transcripts/{id}/segments/{segment_id}` | Edit a segment's text |
+| `GET` | `/api/v1/transcripts/{id}/speakers` | List speakers (auto-synced from segments) |
+| `PATCH` | `/api/v1/transcripts/{id}/speakers/{speaker_id}` | Rename a speaker |
+| `GET` | `/api/v1/transcripts/{id}/export?format=txt\|srt\|vtt` | Download transcript as file |
 
 ---
 
@@ -251,12 +251,27 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 1. **Visit `/media`** — drop an audio or video file onto the upload zone
 2. **File is stored** on disk under `storage/uploads/` and a `MediaFile` record is created
 3. **Click the filename** to open the media detail page
-4. **Click "Start Transcription"** — a `TranscriptionJob` is created and processed in the background
-5. **The job runs the transcription service**, which produces a `Transcript` record and associated `TranscriptSegment` rows
-6. **Visit `/transcripts`** to see completed transcripts; click one to read the full text and timestamped segments
-7. The **dashboard** at `/dashboard` shows live stats, the active job queue, and recent files
+4. **Click "Start Transcription"** — a `TranscriptionJob` is created and runs in the background
+5. **Job progresses:** `pending → processing → completed` (or `failed`)
+6. **On completion**, a `Transcript` and `TranscriptSegment` rows are persisted; `Speaker` rows are synced from segment labels
+7. **Visit `/transcripts`** to see completed transcripts; click one to open the tabbed workspace:
+   - **Segments tab** — ordered segments with timestamps, speaker labels, and inline text editing
+   - **Full Text tab** — complete transcript text
+   - **Speakers tab** — rename speaker labels across all segments
+8. **Export** the transcript as TXT, SRT, or VTT from the export menu on the transcript detail page
 
-> **Note:** The current transcription engine is a stub that returns placeholder text. Real ASR (e.g., Whisper) will be wired in during a future phase using the `_run_engine()` extension point in `app/services/transcription_service.py`.
+> **Note:** The current transcription engine is a GPU-ready stub that returns placeholder text. Real ASR (e.g., Whisper) will be wired in during a future phase via the `_run_engine()` extension point in `app/services/transcription_service.py`.
+
+---
+
+## Current Limitations
+
+- Transcription engine is a GPU-ready stub — real ASR (Whisper, etc.) is not yet wired in
+- No user authentication
+- No waveform visualisation or audio playback
+- No batch job processing
+- SQLite only (PostgreSQL path is planned)
+- Speaker labels are placeholders until real diarization is added
 
 ---
 
@@ -265,9 +280,9 @@ The full interactive reference is available at `http://localhost:8000/docs` when
 ### Backend
 
 - **Add a new API resource:** create a model in `app/models/`, a schema in `app/schemas/`, a router in `app/routers/v1/`, and register it in `app/routers/v1/api.py`.
-- **Add business logic** in `app/services/`, not inside route handlers. Keep routers thin.
-- **All new endpoints go under `/api/v1/`.** If breaking changes are needed, introduce `/api/v2/` rather than changing existing routes.
 - **Models must be imported** in `app/models/__init__.py` for `SQLModel.metadata.create_all()` to pick them up.
+- **Add business logic** in `app/services/`, not inside route handlers. Keep routers thin.
+- **All new endpoints go under `/api/v1/`.** Introduce `/api/v2/` for breaking changes rather than modifying existing routes.
 
 ### Frontend
 
@@ -286,10 +301,11 @@ The following items are planned for future phases and are **not yet implemented*
 
 - **Real ASR integration** — plug Whisper (or another model) into `_run_engine()` in `transcription_service.py`
 - **GPU-backed transcription** — load model onto CUDA device; the `_run_engine()` boundary is already in place
-- **Speaker diarization** — `speaker_label` field already exists on `TranscriptSegment`
-- **Real-time job status** — SSE or WebSocket endpoint for live progress updates in the UI
-- **Transcript editing** — inline correction of transcript text and segments
-- **Export formats** — download transcripts as SRT, VTT, or plain text
+- **Speaker diarization** — `speaker_label` field already exists on `TranscriptSegment`; pyannote.audio or similar
+- **Waveform visualisation and audio playback**
+- **Transcript rich-text editing**
+- **Export to DOCX and JSON**
 - **PostgreSQL migration** — change `DATABASE_URL`; no ORM changes required
 - **Authentication** — JWT-based auth; `app/core/security.py` stub is ready
-- **Job orchestration** — task queue (e.g., ARQ or Celery) for long-running jobs and retry logic
+- **Batch processing and job queue** — ARQ or Celery for long-running jobs and retry logic
+- **Confidence scores per segment**

@@ -12,21 +12,22 @@ export default function StatsPanel() {
       .then(([media, jobs, transcripts]) => {
         setStats({
           totalFiles: media.length,
-          processing: jobs.filter(
+          activeJobs: jobs.filter(
             (j) => j.status === "processing" || j.status === "pending",
           ).length,
-          completed: transcripts.length,
-          errors: jobs.filter((j) => j.status === "error").length,
+          completedJobs: jobs.filter((j) => j.status === "completed").length,
+          failedJobs: jobs.filter((j) => j.status === "failed").length,
+          transcripts: transcripts.length,
         });
       })
       .catch(() => {});
   }, []);
 
   const items = [
-    { label: "Total Files", value: stats?.totalFiles ?? "—", color: "blue" },
-    { label: "Processing", value: stats?.processing ?? "—", color: "yellow" },
-    { label: "Transcripts", value: stats?.completed ?? "—", color: "green" },
-    { label: "Errors", value: stats?.errors ?? "—", color: "red" },
+    { label: "Media Files", value: stats?.totalFiles ?? "—", color: "blue" },
+    { label: "Active Jobs", value: stats?.activeJobs ?? "—", color: "yellow" },
+    { label: "Transcripts", value: stats?.transcripts ?? "—", color: "green" },
+    { label: "Failed Jobs", value: stats?.failedJobs ?? "—", color: "red" },
   ];
 
   return (

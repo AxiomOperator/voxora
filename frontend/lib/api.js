@@ -13,6 +13,9 @@ async function apiFetch(path, options = {}) {
     throw new Error(`API error ${res.status}: ${text}`);
   }
 
+  // 204 No Content
+  if (res.status === 204) return null;
+
   return res.json();
 }
 
@@ -78,6 +81,40 @@ export function getTranscript(transcriptId) {
 
 export function getTranscriptSegments(transcriptId) {
   return apiFetch(`/api/v1/transcripts/${transcriptId}/segments`);
+}
+
+export function updateTranscript(transcriptId, payload) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSegment(transcriptId, segmentId, payload) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/segments/${segmentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Speakers ───────────────────────────────────────────────────────────────
+
+export function getSpeakers(transcriptId) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/speakers`);
+}
+
+export function updateSpeaker(transcriptId, speakerId, name) {
+  return apiFetch(`/api/v1/transcripts/${transcriptId}/speakers/${speakerId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+
+export function getExportUrl(transcriptId, format) {
+  const base = getApiBaseUrl();
+  return `${base}/api/v1/transcripts/${transcriptId}/export?format=${format}`;
 }
 
 // ── Health ─────────────────────────────────────────────────────────────────

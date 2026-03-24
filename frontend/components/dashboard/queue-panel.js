@@ -1,6 +1,16 @@
 "use client";
 
-import { Badge, Card, Skeleton, Stack, Text, Title } from "@mantine/core";
+import {
+  Anchor,
+  Badge,
+  Card,
+  Group,
+  Skeleton,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJobs } from "@/lib/api";
 
@@ -34,7 +44,7 @@ export default function QueuePanel() {
         : jobs.length === 0
           ? <Stack gap="xs">
               <Text size="sm" c="dimmed">
-                No files in queue.
+                No jobs in queue.
               </Text>
               <Badge color="gray" variant="light">
                 0 active
@@ -42,12 +52,18 @@ export default function QueuePanel() {
             </Stack>
           : <Stack gap="xs">
               {jobs.slice(0, 5).map((job) => (
-                <Text key={job.id} size="sm">
-                  Job #{job.id} —{" "}
+                <Group key={job.id} justify="space-between">
+                  <Anchor
+                    component={Link}
+                    href={`/media/${job.media_file_id}`}
+                    size="sm"
+                  >
+                    Media #{job.media_file_id}
+                  </Anchor>
                   <Badge size="xs" color="yellow">
                     {job.status}
                   </Badge>
-                </Text>
+                </Group>
               ))}
               <Badge color="yellow" variant="light">
                 {jobs.length} active

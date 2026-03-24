@@ -13,3 +13,8 @@ class TranscriptSegmentRead(BaseModel):
     confidence: Optional[float]
 
     model_config = {"from_attributes": True}
+
+
+class TranscriptSegmentUpdate(BaseModel):
+    text: Optional[str] = None
+    speaker_label: Optional[str] = None

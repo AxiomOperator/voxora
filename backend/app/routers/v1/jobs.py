@@ -1,6 +1,7 @@
 from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from sqlmodel import select
+
 from app.dependencies import SessionDep
 from app.models.transcription_job import TranscriptionJob
 from app.schemas.transcription_job import TranscriptionJobCreate, TranscriptionJobRead
@@ -9,22 +10,24 @@ from app.services.transcription_service import transcription_service
 router = APIRouter()
 
 
-def _run_transcription(job_id: int, db_url: str):
-    """Background task: runs transcription in a separate thread using its own session."""
+def _run_transcription(job_id: int, db_url: str) -> None:
+    """Background task: runs transcription using its own DB session."""
     from sqlmodel import create_engine, Session
-    engine = create_engine(db_url)
+    engine = create_engine(db_url, connect_args={"check_same_thread": False})
     with Session(engine) as session:
         job = session.get(TranscriptionJob, job_id)
         if job:
-            transcription_service.process_job(job, session)
+            try:
+                transcription_service.process_job(job, session)
+            except Exception:
+                pass  # error state already persisted by the service
 
 
 @router.get("", response_model=List[TranscriptionJobRead])
 def list_jobs(session: SessionDep):
-    jobs = session.exec(
+    return session.exec(
         select(TranscriptionJob).order_by(TranscriptionJob.created_at.desc())
     ).all()
-    return jobs
 
 
 @router.get("/{job_id}", response_model=TranscriptionJobRead)
@@ -57,5 +60,4 @@ def create_job(
     session.refresh(job)
 
     background_tasks.add_task(_run_transcription, job.id, settings.DATABASE_URL)
-
     return job
