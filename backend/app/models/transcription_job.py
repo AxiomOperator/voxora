@@ -17,3 +17,5 @@ class TranscriptionJob(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None)
     transcript_id: Optional[int] = Field(default=None)
     runtime_metadata: Optional[str] = Field(default=None)
+    diarization_enabled: bool = Field(default=False)
+    retry_count: int = Field(default=0)

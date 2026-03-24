@@ -31,6 +31,7 @@ import {
 } from "@/lib/api";
 import ChapterEditor from "./chapter-editor";
 import ChapterList from "./chapter-list";
+import DiarizationStatusBadge from "./diarization-status-badge";
 import ExportActions from "./export-actions";
 import HighlightEditor from "./highlight-editor";
 import HighlightList from "./highlight-list";
@@ -260,11 +261,12 @@ export default function TranscriptDetail({ transcriptId }) {
           <Button
             component={Link}
             href={`/media/${transcript.media_file_id}`}
-            variant="subtle"
+            variant="light"
+            color="blue"
             size="xs"
-            px={0}
+            mt="xs"
           >
-            View source media →
+            📁 View source media →
           </Button>
         </div>
         <Group gap="sm" align="center">
@@ -273,6 +275,12 @@ export default function TranscriptDetail({ transcriptId }) {
               {transcript.detected_language}
             </Badge>
           )}
+          <DiarizationStatusBadge
+            diarizationEnabled={transcript.diarization_enabled}
+            diarizationStatus={transcript.diarization_status}
+            diarizationBackend={transcript.diarization_backend}
+            diarizationError={transcript.diarization_error}
+          />
           <ReviewStatusControl
             transcriptId={transcriptId}
             currentStatus={transcript.review_status ?? "draft"}

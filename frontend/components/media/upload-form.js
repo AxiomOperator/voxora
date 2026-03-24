@@ -35,7 +35,14 @@ export default function UploadForm({ onUploaded }) {
       setSuccess(`"${result.original_name}" uploaded successfully.`);
       if (onUploaded) onUploaded(result);
     } catch (err) {
-      setError(err.message);
+      const msg = err.message ?? "";
+      if (msg.includes("400")) {
+        setError(
+          "Upload rejected: invalid file type or empty file. Please upload a valid audio or video file.",
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setUploading(false);
     }

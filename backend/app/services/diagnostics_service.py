@@ -51,10 +51,22 @@ def check_transcription_runtime() -> dict:
     }
 
 
+def check_diarization() -> dict:
+    from app.services.diarization_service import is_available
+    from app.core.config import settings
+    available = is_available()
+    return {
+        "available": available,
+        "backend": settings.DIARIZATION_BACKEND,
+        "enabled": settings.DIARIZATION_ENABLED,
+    }
+
+
 def get_full_status() -> dict:
     return {
         "database": check_database(),
         "storage": check_storage(),
         "gpu": check_gpu(),
         "transcription": check_transcription_runtime(),
+        "diarization": check_diarization(),
     }

@@ -31,6 +31,13 @@ function fmt(val) {
 }
 
 export default function JobDetail({ job, onRefresh }) {
+  let runtimeMeta = null;
+  try {
+    if (job.runtime_metadata) {
+      runtimeMeta = JSON.parse(job.runtime_metadata);
+    }
+  } catch {}
+
   return (
     <Stack gap="lg">
       <Group gap="xs">
@@ -99,6 +106,38 @@ export default function JobDetail({ job, onRefresh }) {
         <Alert color="red" title="Error">
           {job.error_message}
         </Alert>
+      )}
+
+      {runtimeMeta?.diarization_enabled && (
+        <Stack gap="xs">
+          <Text fw={500} size="sm">
+            Diarization
+          </Text>
+          <Group gap="xs">
+            <Badge variant="outline" size="sm">
+              Backend: {runtimeMeta.diarization_backend ?? "—"}
+            </Badge>
+            <Badge
+              color={
+                runtimeMeta.diarization_status === "done" ||
+                runtimeMeta.diarization_status === "completed"
+                  ? "green"
+                  : runtimeMeta.diarization_status === "failed"
+                    ? "red"
+                    : "blue"
+              }
+              variant="light"
+              size="sm"
+            >
+              {runtimeMeta.diarization_status ?? "unknown"}
+            </Badge>
+          </Group>
+          {runtimeMeta.diarization_error && (
+            <Alert color="yellow" title="Diarization issue">
+              {runtimeMeta.diarization_error}
+            </Alert>
+          )}
+        </Stack>
       )}
 
       {job.status === "failed" && (

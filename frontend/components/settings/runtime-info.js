@@ -49,11 +49,11 @@ export function RuntimeInfo() {
                 Device
               </Text>
               <Badge
-                color={info.device === "cuda" ? "green" : "gray"}
+                color={info.compute_device === "cuda" ? "green" : "gray"}
                 variant="light"
                 size="sm"
               >
-                {info.device ?? "—"}
+                {info.compute_device ?? "—"}
               </Badge>
             </div>
             <div>

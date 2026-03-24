@@ -14,9 +14,13 @@ def _migrate_db():
     """Apply incremental schema migrations at startup."""
     inspector = sa_inspect(engine)
     cols = [c["name"] for c in inspector.get_columns("transcription_jobs")]
-    if "runtime_metadata" not in cols:
-        with engine.begin() as conn:
+    with engine.begin() as conn:
+        if "runtime_metadata" not in cols:
             conn.execute(text("ALTER TABLE transcription_jobs ADD COLUMN runtime_metadata TEXT"))
+        if "diarization_enabled" not in cols:
+            conn.execute(text("ALTER TABLE transcription_jobs ADD COLUMN diarization_enabled INTEGER NOT NULL DEFAULT 0"))
+        if "retry_count" not in cols:
+            conn.execute(text("ALTER TABLE transcription_jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0"))
 
 
 @asynccontextmanager

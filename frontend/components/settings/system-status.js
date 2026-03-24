@@ -50,27 +50,33 @@ export function SystemStatus() {
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={2}>
                 Database
               </Text>
-              {statusBadge(data.database)}
+              {statusBadge(data.database?.status ?? data.database)}
             </div>
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={2}>
                 Storage
               </Text>
-              {statusBadge(data.storage)}
+              {statusBadge(data.storage?.status ?? data.storage)}
             </div>
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={2}>
                 GPU
               </Text>
-              {statusBadge(data.gpu_available, "yes", "no")}
+              {statusBadge(
+                data.gpu?.available ?? data.gpu_available,
+                "yes",
+                "no",
+              )}
             </div>
             <div>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} mb={2}>
                 Runtime
               </Text>
               <Text size="sm">
-                {data.model ?? data.transcription_model ?? "—"}
-                {data.device ? ` · ${data.device}` : ""}
+                {data.transcription?.model ?? data.model ?? "—"}
+                {data.transcription?.device
+                  ? ` · ${data.transcription.device}`
+                  : ""}
               </Text>
             </div>
           </SimpleGrid>

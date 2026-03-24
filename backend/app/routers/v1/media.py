@@ -41,22 +41,26 @@ async def upload_media(
 
     results = []
     for file in files:
-        # Validate the file has content
-        first_byte = await file.read(1)
-        await file.seek(0)
-        if len(first_byte) == 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File '{file.filename or 'upload'}' is empty",
-            )
+        # Read content once for validation + storage
+        content = await file.read()
+        mime = file.content_type or "application/octet-stream"
+        fname = file.filename or "upload"
 
-        saved = await file_service.save_upload(file)
+        try:
+            file_service.validate_upload(fname, mime, len(content))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        stored_name = file_service.safe_stored_name(fname)
+        file_path = file_service.upload_dir / stored_name
+        file_path.write_bytes(content)
+
         media = MediaFile(
-            original_name=file.filename or "upload",
-            stored_name=saved["stored_name"],
-            file_path=saved["file_path"],
-            mime_type=file.content_type or "application/octet-stream",
-            size_bytes=saved["size_bytes"],
+            original_name=fname,
+            stored_name=stored_name,
+            file_path=str(file_path),
+            mime_type=mime,
+            size_bytes=len(content),
             status="pending",
         )
         session.add(media)

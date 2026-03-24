@@ -1,10 +1,18 @@
 "use client";
 
-import { Badge, Button, Group, Stack, Text } from "@mantine/core";
+import {
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Group,
+  Stack,
+  Text,
+} from "@mantine/core";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import { notifications } from "@mantine/notifications";
 import { useRef, useState } from "react";
-import { createJob, uploadMedia } from "@/lib/api";
+import { createBatchJobs, createJob, uploadMedia } from "@/lib/api";
 
 const ACCEPTED_MIME = [
   MIME_TYPES.mp4,
@@ -36,6 +44,9 @@ function statusBadgeColor(status) {
 
 export default function BatchUploadForm({ onUploaded }) {
   const [files, setFiles] = useState([]);
+  const [diarizationEnabled, setDiarizationEnabled] = useState(false);
+  const [batchJobResults, setBatchJobResults] = useState(null);
+  const [batchJobError, setBatchJobError] = useState(null);
   const idRef = useRef(0);
 
   async function handleDrop(dropped) {
@@ -81,7 +92,10 @@ export default function BatchUploadForm({ onUploaded }) {
       ),
     );
     try {
-      await createJob(entry.result.id);
+      await createJob({
+        media_file_id: entry.result.id,
+        diarization_enabled: diarizationEnabled,
+      });
       notifications.show({
         color: "green",
         title: "Job created",
@@ -98,6 +112,46 @@ export default function BatchUploadForm({ onUploaded }) {
       });
     }
   }
+
+  async function handleTranscribeAll() {
+    const uploadedFiles = files.filter(
+      (f) => f.status === "done" && f.result?.id,
+    );
+    if (uploadedFiles.length === 0) return;
+
+    setBatchJobResults(null);
+    setBatchJobError(null);
+
+    try {
+      const mediaFileIds = uploadedFiles.map((f) => f.result.id);
+      const results = await createBatchJobs({
+        media_file_ids: mediaFileIds,
+        diarization_enabled: diarizationEnabled,
+      });
+      setBatchJobResults(results);
+      setFiles((prev) =>
+        prev.map((e) =>
+          e.status === "done" ? { ...e, status: "transcribing" } : e,
+        ),
+      );
+      notifications.show({
+        color: "green",
+        title: "Batch jobs created",
+        message: `Started transcription for ${uploadedFiles.length} file(s)`,
+      });
+    } catch (err) {
+      setBatchJobError(err.message);
+      notifications.show({
+        color: "red",
+        title: "Batch job error",
+        message: err.message,
+      });
+    }
+  }
+
+  const uploadedCount = files.filter(
+    (f) => f.status === "done" || f.status === "transcribing",
+  ).length;
 
   return (
     <Stack gap="sm">
@@ -126,28 +180,59 @@ export default function BatchUploadForm({ onUploaded }) {
         </Group>
       </Dropzone>
 
+      <Checkbox
+        label="Enable speaker diarization"
+        checked={diarizationEnabled}
+        onChange={(e) => setDiarizationEnabled(e.currentTarget.checked)}
+      />
+
       {files.length > 0 && (
         <Stack gap="xs">
           <Group justify="space-between">
             <Text size="sm" c="dimmed">
-              {
-                files.filter(
-                  (f) => f.status === "done" || f.status === "transcribing",
-                ).length
-              }
-              /{files.length} uploaded
+              {uploadedCount}/{files.length} uploaded
               {files.filter((f) => f.status === "error").length > 0 &&
                 ` · ${files.filter((f) => f.status === "error").length} failed`}
             </Text>
-            <Button
-              size="xs"
-              variant="subtle"
-              color="gray"
-              onClick={() => setFiles([])}
-            >
-              Clear list
-            </Button>
+            <Group gap="xs">
+              {files.some((f) => f.status === "done") && (
+                <Button
+                  size="xs"
+                  variant="filled"
+                  onClick={handleTranscribeAll}
+                >
+                  Start Transcription for All
+                </Button>
+              )}
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                onClick={() => {
+                  setFiles([]);
+                  setBatchJobResults(null);
+                  setBatchJobError(null);
+                }}
+              >
+                Clear list
+              </Button>
+            </Group>
           </Group>
+
+          {batchJobError && (
+            <Alert color="red" title="Batch job creation failed">
+              {batchJobError}
+            </Alert>
+          )}
+
+          {batchJobResults && (
+            <Alert color="green" title="Batch jobs created">
+              {Array.isArray(batchJobResults)
+                ? `${batchJobResults.length} job(s) created successfully.`
+                : "Jobs created successfully."}
+            </Alert>
+          )}
+
           {files.map((entry) => (
             <Group key={entry.id} justify="space-between" wrap="nowrap">
               <Text size="sm" truncate style={{ flex: 1 }}>

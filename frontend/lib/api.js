@@ -155,10 +155,11 @@ export function getBackendHealth() {
 
 // ── Batch Jobs ─────────────────────────────────────────────────────────────
 
-export function createBatchJobs(mediaFileIds) {
+export function createBatchJobs(payload) {
+  const body = Array.isArray(payload) ? { media_file_ids: payload } : payload;
   return apiFetch("/api/v1/jobs/batch", {
     method: "POST",
-    body: JSON.stringify({ media_file_ids: mediaFileIds }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -218,8 +219,23 @@ export function getSettings() {
   return apiFetch("/api/v1/settings");
 }
 
+export function updateSettings(payload) {
+  return apiFetch("/api/v1/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDiarizationRuntime() {
+  return apiFetch("/api/v1/runtime");
+}
+
 export function getRuntimeInfo() {
-  return apiFetch("/api/v1/settings/runtime");
+  return apiFetch("/api/v1/runtime");
+}
+
+export function getTranscriptionRuntime() {
+  return apiFetch("/api/v1/runtime/transcription");
 }
 
 // ── Projects ───────────────────────────────────────────────────────────────

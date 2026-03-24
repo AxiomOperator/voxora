@@ -1,5 +1,5 @@
 """
-TranscriptionService — Phase 6.
+TranscriptionService — Phase 9.
 
 Architecture
 ------------
@@ -13,9 +13,13 @@ Two layers:
      pending → processing → completed / failed
    Persists Transcript + TranscriptSegment rows.
    Creates Speaker rows from distinct segment labels.
+   Records runtime_metadata (compute_device, fallback info, timing).
 """
 
+import json
 import logging
+import threading
+import time
 import concurrent.futures
 from datetime import datetime, timezone
 from typing import Optional
@@ -29,17 +33,27 @@ from app.models.transcript_segment import TranscriptSegment
 logger = logging.getLogger(__name__)
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+_gpu_semaphore = threading.Semaphore(1)
 
 
 class TranscriptionService:
     def __init__(self, model_size: str = "base"):
+        from app.core.config import settings
         self.model_size = model_size
         self._model = None  # lazy load
-        try:
-            import torch  # type: ignore
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
+
+        compute_device = getattr(settings, "TRANSCRIPTION_COMPUTE_DEVICE", "auto")
+        if compute_device == "cpu":
             self.device = "cpu"
+        elif compute_device == "cuda":
+            self.device = "cuda"
+        else:  # "auto"
+            try:
+                import ctranslate2  # type: ignore
+                self.device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+            except Exception:
+                self.device = "cpu"
+
         self.compute_type = "float16" if self.device == "cuda" else "int8"
 
     def _get_model(self):
@@ -53,11 +67,13 @@ class TranscriptionService:
         return self._model
 
     def _run_engine(self, file_path: str, language: Optional[str] = None) -> dict:
+        from app.core.config import settings
         model = self._get_model()
+        beam_size = getattr(settings, "TRANSCRIPTION_BEAM_SIZE", 5)
         segments_gen, info = model.transcribe(
             file_path,
             language=language,
-            beam_size=5,
+            beam_size=beam_size,
         )
         segments = []
         full_text_parts = []
@@ -91,34 +107,149 @@ class TranscriptionService:
         """
         Full transcription lifecycle:
           1. Mark job as processing
-          2. Run the engine
-          3. Persist Transcript + TranscriptSegments
-          4. Sync Speaker rows from segment labels
-          5. Mark job as completed
-          On any exception: mark job as failed with error_message
+          2. Acquire GPU semaphore (single-GPU concurrency guard)
+          3. Run the engine (with CUDA-error fallback to CPU)
+          4. Optionally run diarization and map speaker labels
+          5. Save runtime_metadata
+          6. Persist Transcript + TranscriptSegments
+          7. Sync Speaker rows from segment labels
+          8. Mark job as completed
+          On any exception: record metadata then mark job as failed.
         """
         self._mark_processing(job, session)
+        start_time = time.monotonic()
+        fallback_used = False
+        fallback_reason = None
+        active_device = self.device
+        active_compute_type = self.compute_type
 
-        try:
-            file_path = self._resolve_file_path(job, session)
-            result = self._run_engine(file_path, job.language)
+        with _gpu_semaphore:
+            try:
+                file_path = self._resolve_file_path(job, session)
+                result = self._run_engine(file_path, job.language)
+            except Exception as exc:
+                err_str = str(exc).lower()
+                if any(k in err_str for k in ("cuda", "gpu", "out of memory", "device")):
+                    logger.warning("GPU execution failed (%s), retrying on CPU", exc)
+                    fallback_used = True
+                    fallback_reason = f"GPU error: {exc}"
+                    active_device = "cpu"
+                    active_compute_type = "int8"
+                    self._model = None
+                    self.device = "cpu"
+                    self.compute_type = "int8"
+                    try:
+                        result = self._run_engine(file_path, job.language)
+                    except Exception as cpu_exc:
+                        self._save_runtime_metadata(
+                            job, start_time, active_device, active_compute_type,
+                            fallback_used, fallback_reason, session,
+                            diarization_meta={"diarization_status": "skipped"},
+                        )
+                        self._mark_failed(job, str(cpu_exc), session)
+                        raise
+                else:
+                    self._save_runtime_metadata(
+                        job, start_time, active_device, active_compute_type,
+                        False, None, session,
+                        diarization_meta={"diarization_status": "skipped"},
+                    )
+                    self._mark_failed(job, str(exc), session)
+                    raise
 
-            transcript = self._persist_transcript(job, result, session)
-            self._persist_segments(transcript, result.get("segments", []), session)
-            self._sync_speakers(transcript.id, session)
+        # Optionally apply diarization to segments
+        diarization_meta: dict = {}
+        diarize_enabled = getattr(job, "diarization_enabled", False)
+        if diarize_enabled:
+            diarization_meta = self._apply_diarization(file_path, result)
+        else:
+            diarization_meta = {"diarization_status": "disabled"}
 
-            self._mark_completed(job, session)
-            session.refresh(transcript)
-            return transcript
-
-        except Exception as exc:
-            logger.exception("Transcription job %d failed: %s", job.id, exc)
-            self._mark_failed(job, str(exc), session)
-            raise
+        self._save_runtime_metadata(
+            job, start_time, active_device, active_compute_type,
+            fallback_used, fallback_reason, session,
+            diarization_meta=diarization_meta,
+        )
+        transcript = self._persist_transcript(job, result, session)
+        self._persist_segments(transcript, result.get("segments", []), session)
+        self._sync_speakers(transcript.id, session)
+        self._mark_completed(job, session)
+        session.refresh(transcript)
+        return transcript
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _save_runtime_metadata(
+        self,
+        job: TranscriptionJob,
+        start_time: float,
+        device: str,
+        compute_type: str,
+        fallback_used: bool,
+        fallback_reason: Optional[str],
+        session: Session,
+        diarization_meta: Optional[dict] = None,
+    ) -> None:
+        elapsed = round(time.monotonic() - start_time, 2)
+        metadata = {
+            "compute_device": device,
+            "model_name": self.model_size,
+            "compute_type": compute_type,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
+            "processing_seconds": elapsed,
+        }
+        if diarization_meta:
+            metadata.update(diarization_meta)
+        job.runtime_metadata = json.dumps(metadata)
+        job.updated_at = datetime.now(timezone.utc)
+        session.add(job)
+        session.commit()
+
+    def _apply_diarization(self, file_path: str, result: dict) -> dict:
+        """
+        Run diarization and map speaker turns onto ASR segments by timestamp
+        overlap.  Updates result["segments"] in-place.
+        Returns diarization metadata dict.
+        """
+        from app.services.diarization_service import diarize
+        dia = diarize(file_path, enabled=True)
+
+        if dia["diarization_status"] == "error":
+            logger.warning("Diarization error: %s", dia["diarization_error"])
+            return {
+                "diarization_status": dia["diarization_status"],
+                "diarization_backend": dia["diarization_backend"],
+                "diarization_error": dia["diarization_error"],
+            }
+
+        turns = dia.get("turns", [])
+        if turns:
+            for seg in result.get("segments", []):
+                seg_mid = (seg["start"] + seg["end"]) / 2.0
+                label = self._match_speaker(seg_mid, turns)
+                seg["speaker_label"] = label
+
+        return {
+            "diarization_status": dia["diarization_status"],
+            "diarization_backend": dia["diarization_backend"],
+            "diarization_error": dia["diarization_error"],
+            "diarization_turns": len(turns),
+        }
+
+    @staticmethod
+    def _match_speaker(midpoint: float, turns: list) -> str:
+        """Return the speaker label whose turn contains midpoint."""
+        for turn in turns:
+            if turn["start"] <= midpoint <= turn["end"]:
+                return turn["speaker"]
+        # Fall back to nearest turn by start time
+        if turns:
+            nearest = min(turns, key=lambda t: abs(t["start"] - midpoint))
+            return nearest["speaker"]
+        return "SPEAKER_00"
 
     def _mark_processing(self, job: TranscriptionJob, session: Session) -> None:
         job.status = "processing"

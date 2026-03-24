@@ -33,6 +33,8 @@ from pydantic import BaseModel
 
 class BatchJobCreateSchema(BaseModel):
     media_file_ids: List[int]
+    language: Optional[str] = None
+    diarization_enabled: bool = False
 
 
 @router.get("", response_model=List[TranscriptionJobRead])
@@ -67,6 +69,7 @@ def create_job(
     job = TranscriptionJob(
         media_file_id=payload.media_file_id,
         language=payload.language,
+        diarization_enabled=payload.diarization_enabled,
     )
     session.add(job)
     session.commit()
@@ -100,7 +103,11 @@ def batch_create_jobs(
             raise HTTPException(
                 status_code=404, detail=f"Media file {media_file_id} not found"
             )
-        job = TranscriptionJob(media_file_id=media_file_id)
+        job = TranscriptionJob(
+            media_file_id=media_file_id,
+            language=payload.language,
+            diarization_enabled=payload.diarization_enabled,
+        )
         session.add(job)
         session.commit()
         session.refresh(job)

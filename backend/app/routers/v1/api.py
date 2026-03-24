@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.routers import health
-from app.routers.v1 import media, jobs, transcripts, chapters, highlights, settings, projects, notes, diagnostics
+from app.routers.v1 import media, jobs, transcripts, chapters, highlights, settings, projects, notes, diagnostics, runtime
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -13,3 +13,4 @@ api_router.include_router(settings.router)
 api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(notes.router, prefix="/transcripts", tags=["notes"])
 api_router.include_router(diagnostics.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(runtime.router, prefix="/runtime", tags=["runtime"])

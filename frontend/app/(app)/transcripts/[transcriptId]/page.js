@@ -1,10 +1,11 @@
 import { Container } from "@mantine/core";
 import TranscriptDetail from "@/components/transcripts/transcript-detail";
 
-export default function TranscriptDetailPage({ params }) {
+export default async function TranscriptDetailPage({ params }) {
+  const { transcriptId } = await params;
   return (
     <Container size="lg" py="xl">
-      <TranscriptDetail transcriptId={params.transcriptId} />
+      <TranscriptDetail transcriptId={transcriptId} />
     </Container>
   );
 }

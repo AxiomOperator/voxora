@@ -852,3 +852,181 @@ def test_job_retry_flow(client):
     r = client.post(f"/api/v1/jobs/{job_id}/retry")
     assert r.status_code == 200
     assert r.json()["status"] in ("pending", "processing")
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Runtime endpoints
+# ---------------------------------------------------------------------------
+
+def test_runtime_endpoint(client):
+    resp = client.get("/api/v1/runtime")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "gpu_available" in data
+    assert "compute_device" in data
+    assert "model_size" in data
+    assert "faster_whisper_available" in data
+
+
+def test_transcription_runtime_endpoint(client):
+    resp = client.get("/api/v1/runtime/transcription")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "model_size" in data
+    assert "compute_device" in data
+    assert "gpu_available" in data
+    assert "beam_size" in data
+
+
+def test_job_runtime_metadata_populated(client):
+    """After a completed job, runtime_metadata should be a JSON string with compute_device."""
+    import json as _json
+    from sqlmodel import Session, create_engine
+    from app.core.config import settings
+    from app.models.transcription_job import TranscriptionJob
+    from app.services.transcription_service import transcription_service
+
+    media_id = _upload_get_media(client)["id"]
+    job_resp = _create_job_and_wait(client, media_id)
+    job_id = job_resp["id"]
+
+    # Fetch the job and verify runtime_metadata was populated
+    r = client.get(f"/api/v1/jobs/{job_id}")
+    assert r.status_code == 200
+    detail = r.json()
+    assert "runtime_metadata" in detail
+    raw_meta = detail["runtime_metadata"]
+    assert raw_meta is not None, "runtime_metadata should not be None after job completion"
+    meta = _json.loads(raw_meta)
+    assert "compute_device" in meta
+    assert meta["compute_device"] in ("cpu", "cuda")
+    assert "model_name" in meta
+    assert "processing_seconds" in meta
+    assert "fallback_used" in meta
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: MIME-type and empty-file validation
+# ---------------------------------------------------------------------------
+
+def test_upload_invalid_mime_type(client):
+    """Uploading a .txt file should be rejected with 400."""
+    r = client.post(
+        "/api/v1/media/upload",
+        files={"files": ("notes.txt", io.BytesIO(b"hello world"), "text/plain")},
+    )
+    assert r.status_code == 400
+    assert "disallowed" in r.json()["detail"].lower()
+
+
+def test_upload_empty_file_rejected_400(client):
+    """Uploading a zero-byte audio file should be rejected with 400."""
+    r = client.post(
+        "/api/v1/media/upload",
+        files={"files": ("silent.mp3", io.BytesIO(b""), "audio/mpeg")},
+    )
+    assert r.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Diarization service basic test
+# ---------------------------------------------------------------------------
+
+def test_diarization_service_basic():
+    """Diarize with enabled=False returns disabled status without crashing."""
+    from app.services.diarization_service import diarize
+    result = diarize("/nonexistent/path.wav", enabled=False)
+    assert result["diarization_status"] == "disabled"
+    assert result["turns"] == []
+    assert result["diarization_error"] is None
+
+
+def test_diarization_service_error_on_bad_file():
+    """Diarize with enabled=True on a missing file returns error status (not an exception)."""
+    from app.services.diarization_service import diarize
+    result = diarize("/nonexistent/path.wav", enabled=True, backend="heuristic")
+    assert result["diarization_status"] == "error"
+    assert result["diarization_error"] is not None
+    assert result["turns"] == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Job with diarization_enabled flag
+# ---------------------------------------------------------------------------
+
+def test_job_with_diarization_flag(client):
+    """Create a job with diarization_enabled=True, check the DB record reflects it."""
+    media = _upload_get_media(client)
+    r = client.post(
+        "/api/v1/jobs",
+        json={"media_file_id": media["id"], "diarization_enabled": True},
+    )
+    assert r.status_code == 201
+    job = r.json()
+    assert job["diarization_enabled"] is True
+
+    # Verify via GET
+    r2 = client.get(f"/api/v1/jobs/{job['id']}")
+    assert r2.status_code == 200
+    assert r2.json()["diarization_enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Batch job creation with extended schema
+# ---------------------------------------------------------------------------
+
+def test_batch_job_creation_with_diarization(client):
+    """Batch job endpoint accepts diarization_enabled and language fields."""
+    m1 = _upload_get_media(client, filename="a.mp3")["id"]
+    m2 = _upload_get_media(client, filename="b.mp3")["id"]
+    r = client.post(
+        "/api/v1/jobs/batch",
+        json={"media_file_ids": [m1, m2], "diarization_enabled": True, "language": "en"},
+    )
+    assert r.status_code == 201
+    jobs = r.json()
+    assert len(jobs) == 2
+    assert all(j["diarization_enabled"] is True for j in jobs)
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Runtime endpoint includes diarization info
+# ---------------------------------------------------------------------------
+
+def test_runtime_includes_diarization(client):
+    """GET /api/v1/runtime must include diarization_available and diarization_backend."""
+    r = client.get("/api/v1/runtime")
+    assert r.status_code == 200
+    data = r.json()
+    assert "diarization_available" in data
+    assert "diarization_backend" in data
+    assert isinstance(data["diarization_available"], bool)
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Diagnostics includes diarization info
+# ---------------------------------------------------------------------------
+
+def test_diagnostics_includes_diarization(client):
+    """GET /api/v1/diagnostics/status must include a diarization section."""
+    r = client.get("/api/v1/diagnostics/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "diarization" in data
+    assert "available" in data["diarization"]
+    assert "backend" in data["diarization"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 10: Settings includes diarization fields
+# ---------------------------------------------------------------------------
+
+def test_settings_includes_diarization(client):
+    """GET /api/v1/settings must include diarization_enabled and diarization_backend."""
+    r = client.get("/api/v1/settings")
+    assert r.status_code == 200
+    data = r.json()
+    assert "diarization_enabled" in data
+    assert "diarization_backend" in data
+
+

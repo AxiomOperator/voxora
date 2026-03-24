@@ -13,9 +13,10 @@ class Settings(BaseSettings):
     STORAGE_DIR: str = "storage/uploads"
     TRANSCRIPTION_MODEL: str = "base"
     TRANSCRIPTION_LANGUAGE: Optional[str] = None
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    TRANSCRIPTION_BEAM_SIZE: int = 5
+    TRANSCRIPTION_COMPUTE_DEVICE: str = "auto"  # "auto", "cuda", "cpu"
+    DIARIZATION_ENABLED: bool = False
+    DIARIZATION_BACKEND: str = "heuristic"  # "heuristic" or "pyannote"
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

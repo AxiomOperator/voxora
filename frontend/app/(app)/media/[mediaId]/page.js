@@ -1,10 +1,11 @@
 import { Container } from "@mantine/core";
 import MediaDetail from "@/components/media/media-detail";
 
-export default function MediaDetailPage({ params }) {
+export default async function MediaDetailPage({ params }) {
+  const { mediaId } = await params;
   return (
     <Container size="lg" py="xl">
-      <MediaDetail mediaId={params.mediaId} />
+      <MediaDetail mediaId={mediaId} />
     </Container>
   );
 }

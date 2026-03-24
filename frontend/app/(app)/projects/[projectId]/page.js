@@ -18,12 +18,12 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import ProjectForm from "@/components/projects/project-form";
 import { deleteProject, getMedia, getProject } from "@/lib/api";
 
 export default function ProjectDetailPage({ params }) {
-  const { projectId } = params;
+  const { projectId } = use(params);
   const router = useRouter();
   const [project, setProject] = useState(null);
   const [mediaFiles, setMediaFiles] = useState([]);

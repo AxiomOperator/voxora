@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class TranscriptionJobCreate(BaseModel):
     media_file_id: int
     language: Optional[str] = None
+    diarization_enabled: bool = False
 
 
 class TranscriptionJobRead(BaseModel):
@@ -20,5 +21,7 @@ class TranscriptionJobRead(BaseModel):
     started_at: Optional[datetime]
     completed_at: Optional[datetime]
     runtime_metadata: Optional[str] = None
+    diarization_enabled: bool = False
+    retry_count: int = 0
 
     model_config = {"from_attributes": True}
